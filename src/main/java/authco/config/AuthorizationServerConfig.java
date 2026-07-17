@@ -47,7 +47,6 @@ public class AuthorizationServerConfig {
 			authorizationServer.oidc(Customizer.withDefaults());
 			http.securityMatcher(authorizationServer.getEndpointsMatcher());
 		})
-				.securityMatcher()
 				.authorizeHttpRequests((autorize) -> autorize.anyRequest().authenticated())
 
 				.exceptionHandling((exceptions) -> exceptions.defaultAuthenticationEntryPointFor(
@@ -81,14 +80,15 @@ public class AuthorizationServerConfig {
 		RegisteredClient oidcClient = RegisteredClient.withId(UUID.randomUUID().toString())
 				.clientId("oidc-client")
 				.clientSecret("{noop}secret")
-				.clientAuthenticationMethod(ClientAuthenticationMethod.CLIENT_SECRET_BASIC)
+				.clientAuthenticationMethod(ClientAuthenticationMethod.NONE)
 				.authorizationGrantType(AuthorizationGrantType.AUTHORIZATION_CODE)
 				.authorizationGrantType(AuthorizationGrantType.REFRESH_TOKEN)
-				.redirectUri("http://127.0.0.1:8007/login/oauth2/code/oidc-client")
-				.postLogoutRedirectUri("http://127.0.0.1:8080/")
+				.redirectUri("http://127.0.0.1:8888/callback")
+				.postLogoutRedirectUri("http://127.0.0.1:8888/")
 				.scope(OidcScopes.OPENID)
 				.scope(OidcScopes.PROFILE)
-				.clientSettings(ClientSettings.builder().requireAuthorizationConsent(true).build())
+				.clientSettings(
+						ClientSettings.builder().requireProofKey(true).requireAuthorizationConsent(true).build())
 				.build();
 
 		return new InMemoryRegisteredClientRepository(oidcClient);

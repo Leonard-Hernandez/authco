@@ -8,7 +8,7 @@ spring:
     password: massword
   jpa:
     hibernate:
-      ddl-auto: ddl-none
+      ddl-auto: none
 
 authco:
   issuer: http://localhost:8087
