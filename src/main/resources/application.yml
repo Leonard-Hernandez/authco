@@ -1,0 +1,14 @@
+server:
+  port: 8087
+
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5432/authco?createDatabaseIfNotExist=true
+    username: authco
+    password: massword
+  jpa:
+    hibernate:
+      ddl-auto: ddl-none
+
+authco:
+  issuer: http://localhost:8087
