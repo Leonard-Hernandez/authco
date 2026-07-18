@@ -1,0 +1,8 @@
+CREATE TABLE jwk_keys (
+    id VARCHAR(36) PRIMARY KEY,
+    public_key TEXT NOT NULL,
+    private_key TEXT NOT NULL,
+    algorithm VARCHAR(20) NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    active BOOLEAN NOT NULL DEFAULT TRUE
+);

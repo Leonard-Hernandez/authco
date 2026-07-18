@@ -10,22 +10,27 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.annotation.Order;
 import org.springframework.http.MediaType;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.OAuth2AuthorizationServerConfiguration;
-import org.springframework.security.core.userdetails.User;
-import org.springframework.security.core.userdetails.UserDetails;
-import org.springframework.security.core.userdetails.UserDetailsService;
+import org.springframework.security.crypto.bcrypt.BCrypt;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder.BCryptVersion;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.oauth2.core.AuthorizationGrantType;
 import org.springframework.security.oauth2.core.ClientAuthenticationMethod;
 import org.springframework.security.oauth2.core.oidc.OidcScopes;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
-import org.springframework.security.oauth2.server.authorization.client.InMemoryRegisteredClientRepository;
+import org.springframework.security.oauth2.server.authorization.JdbcOAuth2AuthorizationConsentService;
+import org.springframework.security.oauth2.server.authorization.JdbcOAuth2AuthorizationService;
+import org.springframework.security.oauth2.server.authorization.OAuth2AuthorizationConsentService;
+import org.springframework.security.oauth2.server.authorization.OAuth2AuthorizationService;
+import org.springframework.security.oauth2.server.authorization.client.JdbcRegisteredClientRepository;
 import org.springframework.security.oauth2.server.authorization.client.RegisteredClient;
 import org.springframework.security.oauth2.server.authorization.client.RegisteredClientRepository;
 import org.springframework.security.oauth2.server.authorization.settings.AuthorizationServerSettings;
 import org.springframework.security.oauth2.server.authorization.settings.ClientSettings;
-import org.springframework.security.provisioning.InMemoryUserDetailsManager;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.LoginUrlAuthenticationEntryPoint;
 import org.springframework.security.web.util.matcher.MediaTypeRequestMatcher;
@@ -65,37 +70,48 @@ public class AuthorizationServerConfig {
 	}
 
 	@Bean
-	UserDetailsService userDetailsService() {
-		UserDetails userDetails = User.builder()
-				.username("user")
-				.password("{noop}password")
-				.roles("USER")
-				.build();
+	RegisteredClientRepository registeredClientRepository(JdbcTemplate jdbcTemplate) {
+		JdbcRegisteredClientRepository repository = new JdbcRegisteredClientRepository(jdbcTemplate);
 
-		return new InMemoryUserDetailsManager(userDetails);
+		if (repository.findByClientId("oidc-client") == null) {
+			RegisteredClient oidcClient = RegisteredClient.withId(UUID.randomUUID().toString())
+					.clientId("oidc-client")
+					.clientSecret("{noop}secret")
+					.clientAuthenticationMethod(ClientAuthenticationMethod.NONE)
+					.authorizationGrantType(AuthorizationGrantType.AUTHORIZATION_CODE)
+					.authorizationGrantType(AuthorizationGrantType.REFRESH_TOKEN)
+					.redirectUri("http://127.0.0.1:8888/callback")
+					.postLogoutRedirectUri("http://127.0.0.1:8888/")
+					.scope(OidcScopes.OPENID)
+					.scope(OidcScopes.PROFILE)
+					.clientSettings(ClientSettings.builder()
+							.requireProofKey(true)
+							.requireAuthorizationConsent(true)
+							.build())
+					.build();
+
+			repository.save(oidcClient);
+
+		}
+
+		return repository;
+
 	}
 
 	@Bean
-	RegisteredClientRepository registeredClientRepository() {
-		RegisteredClient oidcClient = RegisteredClient.withId(UUID.randomUUID().toString())
-				.clientId("oidc-client")
-				.clientSecret("{noop}secret")
-				.clientAuthenticationMethod(ClientAuthenticationMethod.NONE)
-				.authorizationGrantType(AuthorizationGrantType.AUTHORIZATION_CODE)
-				.authorizationGrantType(AuthorizationGrantType.REFRESH_TOKEN)
-				.redirectUri("http://127.0.0.1:8888/callback")
-				.postLogoutRedirectUri("http://127.0.0.1:8888/")
-				.scope(OidcScopes.OPENID)
-				.scope(OidcScopes.PROFILE)
-				.clientSettings(
-						ClientSettings.builder().requireProofKey(true).requireAuthorizationConsent(true).build())
-				.build();
-
-		return new InMemoryRegisteredClientRepository(oidcClient);
+	OAuth2AuthorizationService authorizationService(JdbcTemplate jdbcTemplate,
+			RegisteredClientRepository registeredClientRepository) {
+		return new JdbcOAuth2AuthorizationService(jdbcTemplate, registeredClientRepository);
 	}
 
 	@Bean
-	public JWKSource<SecurityContext> jwkSource() {
+	OAuth2AuthorizationConsentService authorizationConsentService(JdbcTemplate jdbcTemplate,
+			RegisteredClientRepository registeredClientRepository) {
+		return new JdbcOAuth2AuthorizationConsentService(jdbcTemplate, registeredClientRepository);
+	}
+
+	@Bean
+	JWKSource<SecurityContext> jwkSource() {
 		KeyPair keyPair = generateRsaKey();
 		RSAPublicKey publicKey = (RSAPublicKey) keyPair.getPublic();
 		RSAPrivateKey privateKey = (RSAPrivateKey) keyPair.getPrivate();
@@ -120,13 +136,18 @@ public class AuthorizationServerConfig {
 	}
 
 	@Bean
-	public JwtDecoder jwtDecoder(JWKSource<SecurityContext> jwkSource) {
+	JwtDecoder jwtDecoder(JWKSource<SecurityContext> jwkSource) {
 		return OAuth2AuthorizationServerConfiguration.jwtDecoder(jwkSource);
 	}
 
 	@Bean
-	public AuthorizationServerSettings authorizationServerSettings() {
+	AuthorizationServerSettings authorizationServerSettings() {
 		return AuthorizationServerSettings.builder().build();
+	}
+
+	@Bean
+	PasswordEncoder passwordEncoder() {
+		return new BCryptPasswordEncoder(BCryptVersion.$2Y);
 	}
 
 }
