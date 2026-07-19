@@ -14,7 +14,6 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.OAuth2AuthorizationServerConfiguration;
-import org.springframework.security.crypto.bcrypt.BCrypt;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder.BCryptVersion;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -41,8 +40,14 @@ import com.nimbusds.jose.jwk.source.ImmutableJWKSet;
 import com.nimbusds.jose.jwk.source.JWKSource;
 import com.nimbusds.jose.proc.SecurityContext;
 
+import authco.security.FederatedLoginSuccessHandler;
+import lombok.AllArgsConstructor;
+
 @Configuration
+@AllArgsConstructor
 public class AuthorizationServerConfig {
+
+	private final FederatedLoginSuccessHandler federatedLoginSuccessHandler;
 
 	@Bean
 	@Order(1)
@@ -65,7 +70,9 @@ public class AuthorizationServerConfig {
 	SecurityFilterChain defaultSecurityFilterChain(HttpSecurity http) {
 
 		return http.authorizeHttpRequests((autorize) -> autorize.anyRequest().authenticated())
-				.formLogin(Customizer.withDefaults()).build();
+				.formLogin(form -> form.loginPage("/login").permitAll())
+				.oauth2Login(oauth -> oauth.loginPage("/login").successHandler(federatedLoginSuccessHandler))
+				.build();
 
 	}
 

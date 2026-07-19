@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Authco</title>
+</head>
+<body>
+
+    <form method="post" th:action="@{/login}">
+        <input type="email" name="username">
+        <input type="password" name="password">
+        <button type="submit">Log in</button>
+        <a th:href="@{/oauth2/authorization/google}">Continuar con Google</a>
+        <a th:href="@{/oauth2/authorization/github}">Continuar con Github</a>
+    </form>
+        
+</body>
+</html>

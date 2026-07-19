@@ -4,11 +4,33 @@ server:
 spring:
   datasource:
     url: jdbc:postgresql://localhost:5432/authco?createDatabaseIfNotExist=true
-    username: authco
-    password: massword
+    username: ${USER_DB}
+    password: ${PASSWORD_DB}
   jpa:
     hibernate:
       ddl-auto: none
+  security:
+    oauth2:
+      client:
+        registration:
+          github:
+            client-id: ${GITHUB_CLIENT_ID}
+            client-secret: ${GITHUB_CLIENT_SECRET}
+            scope: 
+              - read:user
+              - user:email
+            redirect-uri: "{baseUrl}/login/oauth2/code/{registrationId}"
+            client-name: GitHub
+            authorization-grant-type: authorization_code
+          google:
+            client-id: ${GOOGLE_CLIENT_ID}
+            client-secret: ${GOOGLE_CLIENT_SECRET}
+            scope: 
+              - email
+              - profile
+            redirect-uri: "{baseUrl}/login/oauth2/code/{registrationId}"
+            client-name: Google
+            authorization-grant-type: authorization_code
 
 authco:
   issuer: http://localhost:8087

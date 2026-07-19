@@ -25,7 +25,7 @@ public class AuthcoUserDetailsService implements UserDetailsService {
 
         UserEntity user = userOptional.orElseThrow(() -> new IllegalArgumentException("User Not Found"));
 
-        return User.builder().username(user.getUsername()).password(user.getPassword())
+        return User.builder().username(user.getId()).password(user.getPassword())
                 .authorities(user.getAuthorities()).build();
     }
 
