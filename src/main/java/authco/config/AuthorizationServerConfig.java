@@ -11,6 +11,7 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.core.annotation.Order;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.security.authentication.AnonymousAuthenticationProvider;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.OAuth2AuthorizationServerConfiguration;
@@ -51,10 +52,16 @@ public class AuthorizationServerConfig {
 
 	@Bean
 	@Order(1)
-	SecurityFilterChain authorizationServerSecurityFilterChain(HttpSecurity http) throws Exception {
+	SecurityFilterChain authorizationServerSecurityFilterChain(HttpSecurity http,
+			RegisteredClientRepository registeredClientRepository, PasswordEncoder passwordEncoder) throws Exception {
 
 		http.oauth2AuthorizationServer((authorizationServer) -> {
-			authorizationServer.oidc(oidc -> oidc.clientRegistrationEndpoint(Customizer.withDefaults()));
+			authorizationServer
+					.oidc(oidc -> oidc.clientRegistrationEndpoint(reg -> reg.authenticationProviders(providers -> {
+						providers.clear();
+						providers.add(new AnonymousClientRegistrationAuthenticationProvider(registeredClientRepository,
+								passwordEncoder));
+					})));
 			http.securityMatcher(authorizationServer.getEndpointsMatcher());
 		})
 				.authorizeHttpRequests((autorize) -> autorize
