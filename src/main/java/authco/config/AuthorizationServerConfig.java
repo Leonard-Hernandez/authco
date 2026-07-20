@@ -54,10 +54,12 @@ public class AuthorizationServerConfig {
 	SecurityFilterChain authorizationServerSecurityFilterChain(HttpSecurity http) throws Exception {
 
 		http.oauth2AuthorizationServer((authorizationServer) -> {
-			authorizationServer.oidc(Customizer.withDefaults());
+			authorizationServer.oidc(oidc -> oidc.clientRegistrationEndpoint(Customizer.withDefaults()));
 			http.securityMatcher(authorizationServer.getEndpointsMatcher());
 		})
-				.authorizeHttpRequests((autorize) -> autorize.anyRequest().authenticated())
+				.authorizeHttpRequests((autorize) -> autorize
+						.requestMatchers("/connect/register").permitAll()
+						.anyRequest().authenticated())
 
 				.exceptionHandling((exceptions) -> exceptions.defaultAuthenticationEntryPointFor(
 						new LoginUrlAuthenticationEntryPoint("/login"),
