@@ -26,8 +26,6 @@ public class FederatedUserService {
     public UserEntity findOrCreate(String provider, String providerUserId,
             String email, String name) {
 
-        System.out.println(provider + " " + providerUserId + " " + email + " " +name);
-
         Optional<FederatedIdentityEntity> federateOptional = federatedIdentityRepository
                 .findByProviderAndProviderUserId(provider, providerUserId);
 

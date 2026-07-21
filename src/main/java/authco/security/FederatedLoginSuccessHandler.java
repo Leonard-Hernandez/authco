@@ -32,8 +32,6 @@ public class FederatedLoginSuccessHandler implements AuthenticationSuccessHandle
 
         OAuth2User oAuth2User = token.getPrincipal();
         
-        System.out.print(oAuth2User.getAttributes().toString());
-
         federatedUserService.findOrCreate(provider, oAuth2User.getName(), oAuth2User.getAttribute("email"),
                 oAuth2User.getAttribute("name"));
 
