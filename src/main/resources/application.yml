@@ -34,3 +34,5 @@ spring:
 
 authco:
   issuer: http://localhost:8087
+  jwk:
+    master-key: ${master-key}
