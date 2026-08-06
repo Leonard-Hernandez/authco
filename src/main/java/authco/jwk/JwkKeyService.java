@@ -10,6 +10,8 @@ import java.security.spec.InvalidKeySpecException;
 import java.security.spec.PKCS8EncodedKeySpec;
 import java.security.spec.X509EncodedKeySpec;
 import java.util.Base64;
+import java.util.List;
+import java.util.Optional;
 
 import org.springframework.stereotype.Service;
 
@@ -68,6 +70,24 @@ public class JwkKeyService {
         }
 
         return new RSAKey.Builder(publicKey).privateKey(privateKey).keyID(entity.getId()).build();
+    }
+
+    public RSAKey getActiveKey() {
+        Optional<JwkKeyEntity> optionalJwk = jwkKeyRepository.findFirstByActiveTrueOrderByCreatedAtDesc();
+
+        JwkKeyEntity jwkKeyEntity = optionalJwk.isPresent() ? optionalJwk.get() : generateAndSave();
+
+        return toRsaKey(jwkKeyEntity);
+
+    }
+
+    public List<RSAKey> getAllKeys() {
+        List<JwkKeyEntity> keyEntities = jwkKeyRepository.findAllByOrderByCreatedAtDesc();
+
+        keyEntities = keyEntities.isEmpty() ? List.of(generateAndSave()) : keyEntities;
+
+        return keyEntities.stream().map((key) -> toRsaKey(key)).toList() ;
+
     }
 
 }
