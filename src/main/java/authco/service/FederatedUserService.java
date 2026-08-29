@@ -24,7 +24,7 @@ public class FederatedUserService {
 
     @Transactional
     public UserEntity findOrCreate(String provider, String providerUserId,
-            String email, String name) {
+            String email, String name, boolean isEmailVerified) {
 
         Optional<FederatedIdentityEntity> federateOptional = federatedIdentityRepository
                 .findByProviderAndProviderUserId(provider, providerUserId);
@@ -54,10 +54,9 @@ public class FederatedUserService {
         newUser.setEnabled(true);
         newUser.setName(name);
         newUser.setRoles(Set.of(role));
-
+        newUser.setEmailVerified(isEmailVerified);
 
         UserEntity newSavedUser = userRepository.save(newUser);
-
 
         FederatedIdentityEntity federatedIdentityEntity = new FederatedIdentityEntity();
         federatedIdentityEntity.setProvider(provider);

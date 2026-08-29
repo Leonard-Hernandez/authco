@@ -4,6 +4,7 @@ import java.io.IOException;
 
 import org.springframework.security.core.Authentication;
 import org.springframework.security.oauth2.client.authentication.OAuth2AuthenticationToken;
+import org.springframework.security.oauth2.core.oidc.StandardClaimNames;
 import org.springframework.security.oauth2.core.user.OAuth2User;
 import org.springframework.security.web.authentication.AuthenticationSuccessHandler;
 import org.springframework.security.web.authentication.SavedRequestAwareAuthenticationSuccessHandler;
@@ -31,9 +32,11 @@ public class FederatedLoginSuccessHandler implements AuthenticationSuccessHandle
         String provider = token.getAuthorizedClientRegistrationId();
 
         OAuth2User oAuth2User = token.getPrincipal();
-        
-        federatedUserService.findOrCreate(provider, oAuth2User.getName(), oAuth2User.getAttribute("email"),
-                oAuth2User.getAttribute("name"));
+
+        federatedUserService.findOrCreate(provider, oAuth2User.getName(),
+                oAuth2User.getAttribute(StandardClaimNames.EMAIL),
+                oAuth2User.getAttribute(StandardClaimNames.NAME),
+                oAuth2User.getAttribute(StandardClaimNames.EMAIL_VERIFIED));
 
         delegate.onAuthenticationSuccess(request, response, authentication);
     }

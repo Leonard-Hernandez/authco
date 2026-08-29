@@ -2,12 +2,13 @@ package authco.config;
 
 import org.springframework.security.core.Authentication;
 import org.springframework.security.oauth2.client.authentication.OAuth2AuthenticationToken;
+import org.springframework.security.oauth2.core.oidc.OidcScopes;
+import org.springframework.security.oauth2.core.oidc.StandardClaimNames;
 import org.springframework.security.oauth2.core.oidc.endpoint.OidcParameterNames;
 import org.springframework.security.oauth2.core.user.OAuth2User;
 import org.springframework.security.oauth2.server.authorization.token.JwtEncodingContext;
 import org.springframework.security.oauth2.server.authorization.token.OAuth2TokenCustomizer;
 import org.springframework.stereotype.Component;
-import org.springframework.transaction.annotation.Transactional;
 
 import authco.user.UserEntity;
 import authco.user.repository.FederatedIdentityRepository;
@@ -34,18 +35,22 @@ public class SubjectTokenCustomizer implements OAuth2TokenCustomizer<JwtEncoding
                     .findByProviderAndProviderUserId(provider, providerUserId)
                     .map(federate -> federate.getUser())
                     .orElseThrow();
-            
+
             if (OidcParameterNames.ID_TOKEN.equals(context.getTokenType().getValue())) {
-                if (context.getAuthorizedScopes().contains("email")) {
-                    context.getClaims().claim("email", user.getEmail());
-                }                
+                if (context.getAuthorizedScopes().contains(OidcScopes.EMAIL)) {
+                    context.getClaims().claim(OidcScopes.EMAIL, user.getEmail())
+                            .claim(StandardClaimNames.EMAIL_VERIFIED, user.isEmailVerified());
+                }
+
+                if (context.getAuthorizedScopes().contains(OidcScopes.PROFILE)) {
+                    context.getClaims().claim(StandardClaimNames.NAME, user.getName());
+                }    
             }
 
-
             context.getClaims().subject(user.getId());
-            
+
         }
-        
+
     }
 
 }
