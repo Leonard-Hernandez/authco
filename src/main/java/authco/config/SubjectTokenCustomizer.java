@@ -38,12 +38,14 @@ public class SubjectTokenCustomizer implements OAuth2TokenCustomizer<JwtEncoding
 
             if (OidcParameterNames.ID_TOKEN.equals(context.getTokenType().getValue())) {
                 if (context.getAuthorizedScopes().contains(OidcScopes.EMAIL)) {
-                    context.getClaims().claim(OidcScopes.EMAIL, user.getEmail())
+                    context.getClaims().claim(StandardClaimNames.EMAIL, user.getEmail())
                             .claim(StandardClaimNames.EMAIL_VERIFIED, user.isEmailVerified());
                 }
 
                 if (context.getAuthorizedScopes().contains(OidcScopes.PROFILE)) {
-                    context.getClaims().claim(StandardClaimNames.NAME, user.getName());
+                    if (user != null && !user.getName().isEmpty()) {
+                        context.getClaims().claim(StandardClaimNames.NAME, user.getName());
+                    }
                 }    
             }
 
