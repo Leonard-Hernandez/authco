@@ -96,6 +96,7 @@ public class AuthorizationServerConfig {
 					.postLogoutRedirectUri("http://127.0.0.1:8888/")
 					.scope(OidcScopes.OPENID)
 					.scope(OidcScopes.PROFILE)
+					.scope(OidcScopes.EMAIL)
 					.clientSettings(ClientSettings.builder()
 							.requireProofKey(true)
 							.requireAuthorizationConsent(true)
