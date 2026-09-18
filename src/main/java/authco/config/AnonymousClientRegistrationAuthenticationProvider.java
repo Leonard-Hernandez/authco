@@ -1,5 +1,7 @@
 package authco.config;
 
+import java.time.Duration;
+
 import org.springframework.core.convert.converter.Converter;
 import org.springframework.security.authentication.AuthenticationProvider;
 import org.springframework.security.core.Authentication;
@@ -11,6 +13,7 @@ import org.springframework.security.oauth2.server.authorization.oidc.OidcClientR
 import org.springframework.security.oauth2.server.authorization.oidc.authentication.OidcClientRegistrationAuthenticationToken;
 import org.springframework.security.oauth2.server.authorization.oidc.converter.OidcClientRegistrationRegisteredClientConverter;
 import org.springframework.security.oauth2.server.authorization.oidc.converter.RegisteredClientOidcClientRegistrationConverter;
+import org.springframework.security.oauth2.server.authorization.settings.TokenSettings;
 
 public class AnonymousClientRegistrationAuthenticationProvider implements AuthenticationProvider {
 
@@ -38,6 +41,8 @@ public class AnonymousClientRegistrationAuthenticationProvider implements Authen
 
 		RegisteredClient registeredClientEncode = RegisteredClient.from(registeredClient)
 				.clientSecret(passwordEncoder.encode(registeredClient.getClientSecret()))
+				.tokenSettings(TokenSettings.builder().accessTokenTimeToLive(Duration.ofMinutes(15))
+							.refreshTokenTimeToLive(Duration.ofDays(1)).build())
 				.build();
 
 		registeredClientRepository.save(registeredClientEncode);

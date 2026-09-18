@@ -1,5 +1,6 @@
 package authco.config;
 
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -27,6 +28,7 @@ import org.springframework.security.oauth2.server.authorization.client.Registere
 import org.springframework.security.oauth2.server.authorization.client.RegisteredClientRepository;
 import org.springframework.security.oauth2.server.authorization.settings.AuthorizationServerSettings;
 import org.springframework.security.oauth2.server.authorization.settings.ClientSettings;
+import org.springframework.security.oauth2.server.authorization.settings.TokenSettings;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.LoginUrlAuthenticationEntryPoint;
 import org.springframework.security.web.util.matcher.MediaTypeRequestMatcher;
@@ -101,6 +103,8 @@ public class AuthorizationServerConfig {
 							.requireProofKey(true)
 							.requireAuthorizationConsent(true)
 							.build())
+					.tokenSettings(TokenSettings.builder().accessTokenTimeToLive(Duration.ofMinutes(15))
+							.refreshTokenTimeToLive(Duration.ofDays(1)).build())
 					.build();
 
 			repository.save(oidcClient);
