@@ -1,16 +1,12 @@
 package authco.user;
 
 import java.time.Instant;
-import java.util.Collection;
 import java.util.HashSet;
 import java.util.Set;
 
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
 import org.hibernate.annotations.UuidGenerator;
-import org.springframework.security.core.GrantedAuthority;
-import org.springframework.security.core.authority.SimpleGrantedAuthority;
-import org.springframework.security.core.userdetails.UserDetails;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -29,7 +25,7 @@ import lombok.Setter;
 @Getter
 @Setter
 @NoArgsConstructor
-public class UserEntity implements UserDetails {
+public class UserEntity {
 
 	@Id
 	@UuidGenerator
@@ -38,10 +34,6 @@ public class UserEntity implements UserDetails {
 
 	@Column(nullable = false, unique = true)
 	private String email;
-
-	// Nullable: a federated-only user (Google, GitHub) may never set a local
-	// password.
-	private String password;
 
 	private String name;
 
@@ -66,13 +58,4 @@ public class UserEntity implements UserDetails {
 	@JoinTable(name = "user_roles", joinColumns = @JoinColumn(name = "user_id"), inverseJoinColumns = @JoinColumn(name = "role_id"))
 	private Set<RoleEntity> roles = new HashSet<>();
 
-	@Override
-	public Collection<? extends GrantedAuthority> getAuthorities() {
-		return this.roles.stream().map(role -> new SimpleGrantedAuthority("ROLE_" + role.getName())).toList();
-	}
-
-	@Override
-	public String getUsername() {
-		return this.email;
-	}
 }

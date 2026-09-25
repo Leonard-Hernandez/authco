@@ -77,8 +77,8 @@ public class AuthorizationServerConfig {
 	SecurityFilterChain defaultSecurityFilterChain(HttpSecurity http) {
 
 		return http.authorizeHttpRequests((autorize) -> autorize.anyRequest().authenticated())
-				.formLogin(form -> form.loginPage("/login").permitAll())
-				.oauth2Login(oauth -> oauth.loginPage("/login").successHandler(federatedLoginSuccessHandler))
+				.oauth2Login(
+						oauth -> oauth.loginPage("/login").permitAll().successHandler(federatedLoginSuccessHandler))
 				.build();
 
 	}
