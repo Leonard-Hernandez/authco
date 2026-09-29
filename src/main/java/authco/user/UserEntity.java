@@ -37,9 +37,6 @@ public class UserEntity {
 
 	private String name;
 
-	@Column(nullable = false)
-	private boolean enabled = true;
-
 	@Column(name = "email_verified", nullable = false)
 	private boolean emailVerified = false;
 
@@ -51,11 +48,21 @@ public class UserEntity {
 	@Column(name = "updated_at")
 	private Instant updatedAt;
 
+	@Column(name = "banned_at")
+	private Instant bannedAt;
+
+	@Column(name = "ban_reason")
+	private String banReason;
+
 	// EAGER on purpose: UserDetailsService needs the authorities at load time,
 	// and the role set per user is tiny. LAZY here would risk
 	// LazyInitializationException.
 	@ManyToMany(fetch = FetchType.EAGER)
 	@JoinTable(name = "user_roles", joinColumns = @JoinColumn(name = "user_id"), inverseJoinColumns = @JoinColumn(name = "role_id"))
 	private Set<RoleEntity> roles = new HashSet<>();
+
+	public boolean isBanned() {
+		return bannedAt != null;
+	}
 
 }

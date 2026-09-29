@@ -5,6 +5,8 @@ import java.util.Set;
 
 import org.springframework.security.core.Authentication;
 import org.springframework.security.oauth2.client.authentication.OAuth2AuthenticationToken;
+import org.springframework.security.oauth2.core.OAuth2AuthenticationException;
+import org.springframework.security.oauth2.core.OAuth2ErrorCodes;
 import org.springframework.security.oauth2.core.endpoint.OAuth2ParameterNames;
 import org.springframework.security.oauth2.core.oidc.OidcScopes;
 import org.springframework.security.oauth2.core.oidc.StandardClaimNames;
@@ -41,6 +43,10 @@ public class SubjectTokenCustomizer implements OAuth2TokenCustomizer<JwtEncoding
                     .map(federate -> federate.getUser())
                     .orElseThrow();
 
+            if (user.isBanned()) {
+                throw new OAuth2AuthenticationException(OAuth2ErrorCodes.INVALID_GRANT);
+            }
+
             if (OidcParameterNames.ID_TOKEN.equals(context.getTokenType().getValue())) {
                 if (context.getAuthorizedScopes().contains(OidcScopes.EMAIL)) {
                     context.getClaims().claim(StandardClaimNames.EMAIL, user.getEmail())
@@ -58,7 +64,8 @@ public class SubjectTokenCustomizer implements OAuth2TokenCustomizer<JwtEncoding
 
                 Set<String> grantedScopes = new HashSet<>(context.getAuthorizedScopes());
                 grantedScopes.retainAll(ClientScopes.ALLOWED);
-                grantedScopes.addAll(federatedIdentityRepository.findRoleNamesByFederatedIdentity(provider, providerUserId));
+                grantedScopes
+                        .addAll(federatedIdentityRepository.findRoleNamesByFederatedIdentity(provider, providerUserId));
 
                 context.getClaims().claim(OAuth2ParameterNames.SCOPE, grantedScopes);
 

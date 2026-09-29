@@ -1,12 +1,10 @@
 package authco.user;
 
 import java.util.Optional;
-import java.util.Set;
 
 import org.springframework.stereotype.Service;
 
 import authco.user.repository.FederatedIdentityRepository;
-import authco.user.repository.RoleRepository;
 import authco.user.repository.UserRepository;
 import jakarta.transaction.Transactional;
 import lombok.AllArgsConstructor;
@@ -16,7 +14,6 @@ import lombok.AllArgsConstructor;
 public class FederatedUserService {
 
     private final UserRepository userRepository;
-    private final RoleRepository roleRepository;
     private final FederatedIdentityRepository federatedIdentityRepository;
 
     @Transactional
@@ -45,12 +42,8 @@ public class FederatedUserService {
 
         UserEntity newUser = new UserEntity();
 
-        RoleEntity role = roleRepository.findByName("USER").get();
-
         newUser.setEmail(email);
-        newUser.setEnabled(true);
         newUser.setName(name);
-        newUser.setRoles(Set.of(role));
         newUser.setEmailVerified(isEmailVerified);
 
         UserEntity newSavedUser = userRepository.save(newUser);
