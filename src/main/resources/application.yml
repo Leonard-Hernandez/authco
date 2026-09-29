@@ -30,4 +30,4 @@ spring:
 authco:
   issuer: http://localhost:8087
   jwk:
-    master-key: ${master-key}server.servlet.session.tracking-modes: cookie
+    master-key: ${master-key}

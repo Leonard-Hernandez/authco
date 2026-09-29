@@ -1,13 +1,10 @@
-package authco.service;
+package authco.user;
 
 import java.util.Optional;
 import java.util.Set;
 
 import org.springframework.stereotype.Service;
 
-import authco.user.FederatedIdentityEntity;
-import authco.user.RoleEntity;
-import authco.user.UserEntity;
 import authco.user.repository.FederatedIdentityRepository;
 import authco.user.repository.RoleRepository;
 import authco.user.repository.UserRepository;

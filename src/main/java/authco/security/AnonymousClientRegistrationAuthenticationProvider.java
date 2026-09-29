@@ -1,4 +1,4 @@
-package authco.config;
+package authco.security;
 
 import java.time.Duration;
 
@@ -33,21 +33,23 @@ public class AnonymousClientRegistrationAuthenticationProvider implements Authen
 	public Authentication authenticate(Authentication authentication) throws AuthenticationException {
 		OidcClientRegistrationAuthenticationToken clientRegistrationAuthentication = (OidcClientRegistrationAuthenticationToken) authentication;
 
-
 		OidcClientRegistration oidcClientRegistration = clientRegistrationAuthentication.getClientRegistration();
 
 		RegisteredClient registeredClient = registeredClientConverter.convert(oidcClientRegistration);
 
+		RegisteredClient filterRegisteredClient = RegisteredClient.from(registeredClient)
+				.scopes(scopes -> scopes.retainAll(ClientScopes.ALLOWED)).build();
 
-		RegisteredClient registeredClientEncode = RegisteredClient.from(registeredClient)
+		RegisteredClient registeredClientEncode = RegisteredClient.from(filterRegisteredClient)
 				.clientSecret(passwordEncoder.encode(registeredClient.getClientSecret()))
 				.tokenSettings(TokenSettings.builder().accessTokenTimeToLive(Duration.ofMinutes(15))
-							.refreshTokenTimeToLive(Duration.ofDays(1)).build())
+						.refreshTokenTimeToLive(Duration.ofDays(1)).build())
 				.build();
 
 		registeredClientRepository.save(registeredClientEncode);
 
-		OidcClientRegistration oidcClientRegistrationPlainScrect = clientRegistrationConverter.convert(registeredClient);
+		OidcClientRegistration oidcClientRegistrationPlainScrect = clientRegistrationConverter
+				.convert(filterRegisteredClient);
 
 		return new OidcClientRegistrationAuthenticationToken(authentication, oidcClientRegistrationPlainScrect);
 	}

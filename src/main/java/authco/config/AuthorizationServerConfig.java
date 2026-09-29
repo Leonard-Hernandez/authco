@@ -39,6 +39,7 @@ import com.nimbusds.jose.jwk.source.JWKSource;
 import com.nimbusds.jose.proc.SecurityContext;
 
 import authco.jwk.JwkKeyService;
+import authco.security.AnonymousClientRegistrationAuthenticationProvider;
 import authco.security.FederatedLoginSuccessHandler;
 import lombok.AllArgsConstructor;
 

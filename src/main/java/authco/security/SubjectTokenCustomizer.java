@@ -1,11 +1,16 @@
-package authco.config;
+package authco.security;
+
+import java.util.HashSet;
+import java.util.Set;
 
 import org.springframework.security.core.Authentication;
 import org.springframework.security.oauth2.client.authentication.OAuth2AuthenticationToken;
+import org.springframework.security.oauth2.core.endpoint.OAuth2ParameterNames;
 import org.springframework.security.oauth2.core.oidc.OidcScopes;
 import org.springframework.security.oauth2.core.oidc.StandardClaimNames;
 import org.springframework.security.oauth2.core.oidc.endpoint.OidcParameterNames;
 import org.springframework.security.oauth2.core.user.OAuth2User;
+import org.springframework.security.oauth2.server.authorization.OAuth2TokenType;
 import org.springframework.security.oauth2.server.authorization.token.JwtEncodingContext;
 import org.springframework.security.oauth2.server.authorization.token.OAuth2TokenCustomizer;
 import org.springframework.stereotype.Component;
@@ -43,10 +48,20 @@ public class SubjectTokenCustomizer implements OAuth2TokenCustomizer<JwtEncoding
                 }
 
                 if (context.getAuthorizedScopes().contains(OidcScopes.PROFILE)) {
-                    if (user != null && !user.getName().isEmpty()) {
+                    if (user.getName() != null && !user.getName().isBlank()) {
                         context.getClaims().claim(StandardClaimNames.NAME, user.getName());
                     }
-                }    
+                }
+            }
+
+            if (OAuth2TokenType.ACCESS_TOKEN.equals(context.getTokenType())) {
+
+                Set<String> grantedScopes = new HashSet<>(context.getAuthorizedScopes());
+                grantedScopes.retainAll(ClientScopes.ALLOWED);
+                grantedScopes.addAll(federatedIdentityRepository.findRoleNamesByFederatedIdentity(provider, providerUserId));
+
+                context.getClaims().claim(OAuth2ParameterNames.SCOPE, grantedScopes);
+
             }
 
             context.getClaims().subject(user.getId());
