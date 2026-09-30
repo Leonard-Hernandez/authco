@@ -4,6 +4,7 @@ import java.util.Optional;
 
 import org.springframework.stereotype.Service;
 
+import authco.user.exception.UnverifiedEmailConflictException;
 import authco.user.repository.FederatedIdentityRepository;
 import authco.user.repository.UserRepository;
 import jakarta.transaction.Transactional;
@@ -17,40 +18,44 @@ public class FederatedUserService {
     private final FederatedIdentityRepository federatedIdentityRepository;
 
     @Transactional
-    public UserEntity findOrCreate(String provider, String providerUserId,
-            String email, String name, boolean isEmailVerified) {
+    public UserEntity findOrCreate(FederatedProfile federateProfile) {
 
         Optional<FederatedIdentityEntity> federateOptional = federatedIdentityRepository
-                .findByProviderAndProviderUserId(provider, providerUserId);
+                .findByProviderAndProviderUserId(federateProfile.provider(), federateProfile.providerUserId());
 
         if (federateOptional.isPresent()) {
-            return userRepository.findByEmail(email).get();
+            return federateOptional.get().getUser();
         }
 
-        Optional<UserEntity> userOptional = userRepository.findByEmail(email);
+        Optional<UserEntity> userOptional = userRepository.findByEmail(federateProfile.email());
 
         if (userOptional.isPresent()) {
-            FederatedIdentityEntity federatedIdentityEntity = new FederatedIdentityEntity();
-            federatedIdentityEntity.setProvider(provider);
-            federatedIdentityEntity.setProviderUserId(providerUserId);
-            federatedIdentityEntity.setUser(userOptional.get());
+            if (federateProfile.emailVerified()) {
+                FederatedIdentityEntity federatedIdentityEntity = new FederatedIdentityEntity();
+                federatedIdentityEntity.setProvider(federateProfile.provider());
+                federatedIdentityEntity.setProviderUserId(federateProfile.providerUserId());
+                federatedIdentityEntity.setUser(userOptional.get());
 
-            federatedIdentityRepository.save(federatedIdentityEntity);
+                federatedIdentityRepository.save(federatedIdentityEntity);
 
-            return userOptional.get();
+                return userOptional.get();
+            } else {
+                throw new UnverifiedEmailConflictException();
+            }
+
         }
 
         UserEntity newUser = new UserEntity();
 
-        newUser.setEmail(email);
-        newUser.setName(name);
-        newUser.setEmailVerified(isEmailVerified);
+        newUser.setEmail(federateProfile.email());
+        newUser.setName(federateProfile.name());
+        newUser.setEmailVerified(federateProfile.emailVerified());
 
         UserEntity newSavedUser = userRepository.save(newUser);
 
         FederatedIdentityEntity federatedIdentityEntity = new FederatedIdentityEntity();
-        federatedIdentityEntity.setProvider(provider);
-        federatedIdentityEntity.setProviderUserId(providerUserId);
+        federatedIdentityEntity.setProvider(federateProfile.provider());
+        federatedIdentityEntity.setProviderUserId(federateProfile.providerUserId());
         federatedIdentityEntity.setUser(newSavedUser);
 
         federatedIdentityRepository.save(federatedIdentityEntity);

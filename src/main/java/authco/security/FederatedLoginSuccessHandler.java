@@ -10,6 +10,7 @@ import org.springframework.security.web.authentication.AuthenticationSuccessHand
 import org.springframework.security.web.authentication.SavedRequestAwareAuthenticationSuccessHandler;
 import org.springframework.stereotype.Component;
 
+import authco.user.FederatedProfile;
 import authco.user.FederatedUserService;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -33,10 +34,12 @@ public class FederatedLoginSuccessHandler implements AuthenticationSuccessHandle
 
         OAuth2User oAuth2User = token.getPrincipal();
 
-        federatedUserService.findOrCreate(provider, oAuth2User.getName(),
+        FederatedProfile federateProfile = new FederatedProfile(provider, oAuth2User.getName(),
                 oAuth2User.getAttribute(StandardClaimNames.EMAIL),
-                oAuth2User.getAttribute(StandardClaimNames.NAME),
-                oAuth2User.getAttribute(StandardClaimNames.EMAIL_VERIFIED));
+                oAuth2User.getAttribute(StandardClaimNames.EMAIL_VERIFIED),
+                oAuth2User.getAttribute(StandardClaimNames.NAME));
+
+        federatedUserService.findOrCreate(federateProfile);
 
         delegate.onAuthenticationSuccess(request, response, authentication);
     }
