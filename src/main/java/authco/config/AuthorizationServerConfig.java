@@ -40,14 +40,14 @@ import com.nimbusds.jose.proc.SecurityContext;
 
 import authco.jwk.JwkKeyService;
 import authco.security.AnonymousClientRegistrationAuthenticationProvider;
-import authco.security.FederatedLoginSuccessHandler;
+import authco.security.FederatedOidcUserService;
 import lombok.AllArgsConstructor;
 
 @Configuration
 @AllArgsConstructor
 public class AuthorizationServerConfig {
 
-	private final FederatedLoginSuccessHandler federatedLoginSuccessHandler;
+	private final FederatedOidcUserService federatedOidcUserService;
 
 	@Bean
 	@Order(1)
@@ -79,7 +79,8 @@ public class AuthorizationServerConfig {
 
 		return http.authorizeHttpRequests((autorize) -> autorize.anyRequest().authenticated())
 				.oauth2Login(
-						oauth -> oauth.loginPage("/login").permitAll().successHandler(federatedLoginSuccessHandler))
+						oauth -> oauth.loginPage("/login").permitAll()
+								.userInfoEndpoint(userinfo -> userinfo.oidcUserService(federatedOidcUserService)))
 				.build();
 
 	}

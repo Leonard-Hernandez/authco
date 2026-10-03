@@ -4,7 +4,6 @@ import java.util.HashSet;
 import java.util.Set;
 
 import org.springframework.security.core.Authentication;
-import org.springframework.security.oauth2.client.authentication.OAuth2AuthenticationToken;
 import org.springframework.security.oauth2.core.OAuth2AuthenticationException;
 import org.springframework.security.oauth2.core.OAuth2ErrorCodes;
 import org.springframework.security.oauth2.core.endpoint.OAuth2ParameterNames;
@@ -18,14 +17,14 @@ import org.springframework.security.oauth2.server.authorization.token.OAuth2Toke
 import org.springframework.stereotype.Component;
 
 import authco.user.UserEntity;
-import authco.user.repository.FederatedIdentityRepository;
+import authco.user.repository.UserRepository;
 import lombok.AllArgsConstructor;
 
 @Component
 @AllArgsConstructor
 public class SubjectTokenCustomizer implements OAuth2TokenCustomizer<JwtEncodingContext> {
 
-    private final FederatedIdentityRepository federatedIdentityRepository;
+    private final UserRepository userRepository;
 
     @Override
     public void customize(JwtEncodingContext context) {
@@ -34,14 +33,10 @@ public class SubjectTokenCustomizer implements OAuth2TokenCustomizer<JwtEncoding
 
         if (principal.getPrincipal() instanceof OAuth2User oAuth2User) {
 
-            String provider = ((OAuth2AuthenticationToken) principal)
-                    .getAuthorizedClientRegistrationId();
-            String providerUserId = oAuth2User.getName();
+            String userId = oAuth2User.getName();
 
-            UserEntity user = federatedIdentityRepository
-                    .findByProviderAndProviderUserId(provider, providerUserId)
-                    .map(federate -> federate.getUser())
-                    .orElseThrow();
+            UserEntity user = userRepository.findById(userId)
+                    .orElseThrow(() -> new OAuth2AuthenticationException(OAuth2ErrorCodes.INVALID_GRANT));
 
             if (user.isBanned()) {
                 throw new OAuth2AuthenticationException(OAuth2ErrorCodes.INVALID_GRANT);
@@ -65,7 +60,7 @@ public class SubjectTokenCustomizer implements OAuth2TokenCustomizer<JwtEncoding
                 Set<String> grantedScopes = new HashSet<>(context.getAuthorizedScopes());
                 grantedScopes.retainAll(ClientScopes.ALLOWED);
                 grantedScopes
-                        .addAll(federatedIdentityRepository.findRoleNamesByFederatedIdentity(provider, providerUserId));
+                        .addAll(userRepository.findRoleNamesByUserId(userId));
 
                 context.getClaims().claim(OAuth2ParameterNames.SCOPE, grantedScopes);
 
