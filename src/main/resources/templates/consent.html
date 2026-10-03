@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments/layout :: head('Consent · authco')}"></head>
+<style>
+    .account { display: flex; align-items: center; gap: 10px; font-size: 14px; color: var(--muted); }
+
+    .card {
+        width: 480px;
+        max-width: 100%;
+        background: var(--surface);
+        border: 1px solid var(--line);
+        border-radius: 20px;
+        padding: 36px;
+        display: flex;
+        flex-direction: column;
+        gap: 28px;
+    }
+
+    .intro { display: flex; flex-direction: column; gap: 20px; }
+    .link { display: flex; align-items: center; gap: 10px; }
+    .link .app-mark { width: 44px; height: 44px; border-radius: 12px; font-size: 17px; }
+
+    .heading { display: flex; flex-direction: column; gap: 8px; }
+    .heading h1 { margin: 0; font-size: 26px; font-weight: 600; letter-spacing: -0.025em; line-height: 1.2; }
+    .heading p { margin: 0; font-size: 14px; color: var(--muted); line-height: 1.5; }
+
+    .permissions { display: flex; flex-direction: column; }
+
+    .permissions-title {
+        font-size: 11px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--muted);
+        padding-bottom: 8px;
+    }
+
+    .permission {
+        display: flex;
+        align-items: flex-start;
+        gap: 14px;
+        padding: 14px 0;
+        border-top: 1px solid var(--line-soft);
+    }
+
+    .permission:last-child { border-bottom: 1px solid var(--line-soft); }
+    .permission svg { flex-shrink: 0; margin-top: 1px; }
+    .permission-text { flex-grow: 1; display: flex; flex-direction: column; gap: 2px; }
+    .permission-name { font-size: 15px; font-weight: 500; }
+    .permission-desc { font-size: 13px; color: var(--muted); }
+    .permission-tag { font-size: 12px; color: var(--muted); padding-top: 2px; }
+
+    .note { margin: 0; font-size: 13px; color: var(--muted); line-height: 1.6; }
+
+    .actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+    .actions form { margin: 0; }
+
+    .redirect { color: var(--ink); font-size: 12px; }
+
+    @media (max-width: 640px) {
+        body { background: var(--surface); }
+        .account-email { display: none; }
+        .card { border: 0; border-radius: 0; padding: 12px 0 0; justify-content: flex-start; gap: 24px; }
+        .actions { grid-template-columns: 1fr; }
+        .actions .allow { order: -1; }
+        .btn { height: 52px; }
+    }
+</style>
+<body>
+
+    <header class="topbar">
+        <div th:replace="~{fragments/layout :: brand}"></div>
+        <div class="account">
+            <div class="avatar" style="width: 28px; height: 28px; font-size: 12px"
+                th:text="${#strings.toUpperCase(#strings.substring(userEmail, 0, 1))}">U</div>
+            <span class="account-email" th:text="${userEmail}">[user@email.com]</span>
+        </div>
+    </header>
+
+    <main class="main">
+        <div class="card">
+
+            <div class="intro">
+                <div class="link" aria-hidden="true">
+                    <div class="app-mark" th:text="${#strings.toUpperCase(#strings.substring(clientName, 0, 1))}">A</div>
+                    <svg width="36" height="12" viewBox="0 0 36 12" fill="none" stroke="#B9B7B0" stroke-width="1.5"
+                        stroke-dasharray="2 3">
+                        <path d="M1 6h34"></path>
+                    </svg>
+                    <div class="avatar" style="width: 44px; height: 44px; font-size: 16px"
+                        th:text="${#strings.toUpperCase(#strings.substring(userEmail, 0, 1))}">U</div>
+                </div>
+                <div class="heading">
+                    <h1 th:text="|${clientName} wants to access your account|">[Client app] wants to access your account</h1>
+                    <p>Signed in as <span th:text="${userEmail}">[user@email.com]</span></p>
+                </div>
+            </div>
+
+            <!-- scopes: what the client asked for, minus openid (Spring approves it without consent). -->
+            <div class="permissions">
+                <div class="permissions-title mono">Requested permissions</div>
+
+                <div class="permission" th:each="scope : ${scopes}" th:switch="${scope}">
+                    <th:block th:case="'profile'">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
+                            <circle cx="12" cy="8" r="4"></circle>
+                            <path d="M4 21c1.2-4 4.3-6 8-6s6.8 2 8 6"></path>
+                        </svg>
+                        <div class="permission-text">
+                            <div class="permission-name">Basic profile</div>
+                            <div class="permission-desc">Your name</div>
+                        </div>
+                    </th:block>
+                    <th:block th:case="'email'">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
+                            <rect x="3" y="5" width="18" height="14" rx="2.5"></rect>
+                            <path d="M4 7l8 6 8-6"></path>
+                        </svg>
+                        <div class="permission-text">
+                            <div class="permission-name">Email address</div>
+                            <div class="permission-desc">View your email address</div>
+                        </div>
+                    </th:block>
+                    <th:block th:case="*">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
+                            <circle cx="12" cy="12" r="9"></circle>
+                            <path d="M12 8v4M12 16h.01"></path>
+                        </svg>
+                        <div class="permission-text">
+                            <div class="permission-name mono" th:text="${scope}">scope</div>
+                        </div>
+                    </th:block>
+                    <span class="permission-tag">Required</span>
+                </div>
+            </div>
+
+            <p class="note">Only what you approve is shared.</p>
+
+            <!-- Two forms on purpose: Allow posts every scope; Cancel posts none, which Spring
+                 treats as a denial and answers the client with access_denied. -->
+            <div class="actions">
+                <form method="post" th:action="@{/oauth2/authorize}">
+                    <input type="hidden" name="client_id" th:value="${clientId}">
+                    <input type="hidden" name="state" th:value="${state}">
+                    <button type="submit" class="btn btn-secondary">Cancel</button>
+                </form>
+                <form method="post" th:action="@{/oauth2/authorize}" class="allow">
+                    <input type="hidden" name="client_id" th:value="${clientId}">
+                    <input type="hidden" name="state" th:value="${state}">
+                    <input type="hidden" name="scope" th:each="scope : ${scopes}" th:value="${scope}">
+                    <button type="submit" class="btn btn-primary">Allow access</button>
+                </form>
+            </div>
+
+        </div>
+    </main>
+
+    <footer class="footer" th:if="${redirectHost}">
+        <svg th:replace="~{fragments/layout :: shield}"></svg>
+        You’ll be redirected to <span class="mono redirect" th:text="${redirectHost}">[app.domain.com]</span>
+    </footer>
+
+</body>
+</html>

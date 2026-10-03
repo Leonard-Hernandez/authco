@@ -56,6 +56,7 @@ public class AuthorizationServerConfig {
 
 		http.oauth2AuthorizationServer((authorizationServer) -> {
 			authorizationServer
+					.authorizationEndpoint(endpoint -> endpoint.consentPage("/oauth2/consent"))
 					.oidc(oidc -> oidc.clientRegistrationEndpoint(reg -> reg.authenticationProviders(providers -> {
 						providers.clear();
 						providers.add(new AnonymousClientRegistrationAuthenticationProvider(registeredClientRepository,
