@@ -1,5 +1,8 @@
 server:
   servlet:
+    # Every endpoint lives under /authco, and the issuer follows it:
+    # tokens carry iss=http://localhost:8087/authco.
+    context-path: /authco
     session:
       tracking-modes:
       - cookie
@@ -29,6 +32,6 @@ spring:
             authorization-grant-type: authorization_code
 
 authco:
-  issuer: http://localhost:8087
+  issuer: http://localhost:8087/authco
   jwk:
     master-key: ${master-key}
