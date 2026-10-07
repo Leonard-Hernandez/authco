@@ -9,14 +9,18 @@ import java.security.interfaces.RSAPublicKey;
 import java.security.spec.InvalidKeySpecException;
 import java.security.spec.PKCS8EncodedKeySpec;
 import java.security.spec.X509EncodedKeySpec;
+import java.time.Instant;
 import java.util.Base64;
 import java.util.List;
 import java.util.Optional;
 
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import com.nimbusds.jose.jwk.RSAKey;
 
+import authco.jwk.exception.ActiveKeyRevocationException;
+import authco.jwk.exception.JwkKeyNotFoundException;
 import authco.jwk.repository.JwkKeyRepository;
 import lombok.AllArgsConstructor;
 
@@ -82,12 +86,50 @@ public class JwkKeyService {
     }
 
     public List<RSAKey> getAllKeys() {
-        List<JwkKeyEntity> keyEntities = jwkKeyRepository.findAllByOrderByCreatedAtDesc();
+        List<JwkKeyEntity> keyEntities = jwkKeyRepository.findAllByRevokedAtIsNullOrderByCreatedAtDesc();
 
         keyEntities = keyEntities.isEmpty() ? List.of(generateAndSave()) : keyEntities;
 
         return keyEntities.stream().map((key) -> toRsaKey(key)).toList() ;
 
+    }
+
+    // The kid the encoder must sign with when the JWKS holds several keys.
+    public String getActiveKeyId() {
+        return getActiveKey().getKeyID();
+    }
+
+    public List<JwkKeyEntity> listKeys() {
+        return jwkKeyRepository.findAllByOrderByCreatedAtDesc();
+    }
+
+    // The previous active key is retired, not revoked: it stays on the JWKS so
+    // tokens it already signed keep validating until they expire.
+    @Transactional
+    public JwkKeyEntity rotate() {
+        List<JwkKeyEntity> activeKeys = jwkKeyRepository.findAllByActiveTrue();
+        activeKeys.forEach(key -> key.setActive(false));
+        jwkKeyRepository.saveAll(activeKeys);
+
+        return generateAndSave();
+    }
+
+    // Refuses the active key: revoking it would leave the server with nothing
+    // to sign with. Rotate first, then revoke the retired key.
+    @Transactional
+    public JwkKeyEntity revoke(String keyId) {
+        JwkKeyEntity key = jwkKeyRepository.findById(keyId)
+                .orElseThrow(() -> new JwkKeyNotFoundException(keyId));
+
+        if (key.isActive()) {
+            throw new ActiveKeyRevocationException(keyId);
+        }
+
+        if (!key.isRevoked()) {
+            key.setRevokedAt(Instant.now());
+        }
+
+        return jwkKeyRepository.save(key);
     }
 
 }

@@ -19,6 +19,8 @@ import org.springframework.security.oauth2.core.AuthorizationGrantType;
 import org.springframework.security.oauth2.core.ClientAuthenticationMethod;
 import org.springframework.security.oauth2.core.oidc.OidcScopes;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
+import org.springframework.security.oauth2.jwt.JwtEncoder;
+import org.springframework.security.oauth2.jwt.NimbusJwtEncoder;
 import org.springframework.security.oauth2.server.authorization.JdbcOAuth2AuthorizationConsentService;
 import org.springframework.security.oauth2.server.authorization.JdbcOAuth2AuthorizationService;
 import org.springframework.security.oauth2.server.authorization.OAuth2AuthorizationConsentService;
@@ -78,7 +80,11 @@ public class AuthorizationServerConfig {
 	@Order(2)
 	SecurityFilterChain defaultSecurityFilterChain(HttpSecurity http) {
 
-		return http.authorizeHttpRequests((autorize) -> autorize.anyRequest().authenticated())
+		// /error must stay open: a 401 from another chain (e.g. the admin Basic auth) is
+		// forwarded there, and requiring login on it turns the 401 into a redirect to /login.
+		return http.authorizeHttpRequests((autorize) -> autorize
+				.requestMatchers("/error").permitAll()
+				.anyRequest().authenticated())
 				.oauth2Login(
 						oauth -> oauth.loginPage("/login").permitAll()
 								.userInfoEndpoint(userinfo -> userinfo.oidcUserService(federatedOidcUserService)))
@@ -139,6 +145,21 @@ public class AuthorizationServerConfig {
 
 		};
 
+	}
+
+	// After a rotation the JWKS holds several RS256 keys, and NimbusJwtEncoder refuses
+	// to guess which one to sign with. Retired keys are there only for verification.
+	@Bean
+	JwtEncoder jwtEncoder(JWKSource<SecurityContext> jwkSource, JwkKeyService jwkKeyService) {
+		NimbusJwtEncoder encoder = new NimbusJwtEncoder(jwkSource);
+		encoder.setJwkSelector(jwks -> {
+			String activeKeyId = jwkKeyService.getActiveKeyId();
+			return jwks.stream()
+					.filter(jwk -> activeKeyId.equals(jwk.getKeyID()))
+					.findFirst()
+					.orElseThrow(() -> new IllegalStateException("Active signing key " + activeKeyId + " is not in the JWKS"));
+		});
+		return encoder;
 	}
 
 	@Bean

@@ -1,0 +1,17 @@
+# Layered on top of src/main/resources/application.yml when the "test" profile
+# is active. Only the values that come from environment variables in main are
+# overridden here; the database comes from Testcontainers (@ServiceConnection).
+
+spring:
+  security:
+    oauth2:
+      client:
+        registration:
+          google:
+            client-id: test-client-id
+            client-secret: test-client-secret
+
+authco:
+  jwk:
+    # Test-only AES-256 key (openssl rand -base64 32). Never used outside tests.
+    master-key: bnwdZ0qxYcKYV9LvCGZFV1DkBVaYZdsqJdBC3rCPZOU=

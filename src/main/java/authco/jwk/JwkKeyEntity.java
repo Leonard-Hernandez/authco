@@ -53,4 +53,13 @@ public class JwkKeyEntity {
 	@CreationTimestamp
 	@Column(name = "created_at", updatable = false)
 	private Instant createdAt;
+
+	// Set when the key is denied: it leaves the JWKS and every token it signed
+	// stops validating immediately, without waiting for expiry.
+	@Column(name = "revoked_at")
+	private Instant revokedAt;
+
+	public boolean isRevoked() {
+		return revokedAt != null;
+	}
 }

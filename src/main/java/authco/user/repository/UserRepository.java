@@ -1,5 +1,6 @@
 package authco.user.repository;
 
+import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 
@@ -19,4 +20,6 @@ public interface UserRepository extends JpaRepository<UserEntity, String> {
 	// the whole roles collection just to read one column.
 	@Query("select r.name from UserEntity u join u.roles r where u.id = :userId")
 	Set<String> findRoleNamesByUserId(String userId);
+
+	List<UserEntity> findAllByOrderByCreatedAtDesc();
 }

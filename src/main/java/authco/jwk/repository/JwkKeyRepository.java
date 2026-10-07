@@ -13,7 +13,12 @@ public interface JwkKeyRepository extends JpaRepository<JwkKeyEntity, String> {
 	// leaves two rows active still resolves to the one just promoted.
 	Optional<JwkKeyEntity> findFirstByActiveTrueOrderByCreatedAtDesc();
 
-	// Everything the JWKS endpoint publishes: the active key plus the retired
-	// ones still inside their grace period.
+	// Every key ever created, revoked ones included. For the admin listing.
 	List<JwkKeyEntity> findAllByOrderByCreatedAtDesc();
+
+	// Everything the JWKS endpoint publishes: the active key plus the retired
+	// ones still inside their grace period. Revoked keys are left out.
+	List<JwkKeyEntity> findAllByRevokedAtIsNullOrderByCreatedAtDesc();
+
+	List<JwkKeyEntity> findAllByActiveTrue();
 }
