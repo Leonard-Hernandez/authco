@@ -20,7 +20,7 @@ import org.springframework.stereotype.Component;
 import authco.user.FederatedProfile;
 import authco.user.FederatedUserService;
 import authco.user.UserEntity;
-import authco.user.exception.UnverifiedEmailConflictException;
+import authco.user.exception.UnverifiedEmailException;
 import lombok.RequiredArgsConstructor;
 
 @Component
@@ -51,7 +51,7 @@ public class FederatedOidcUserService implements OAuth2UserService<OidcUserReque
 
             return new DefaultOidcUser(authorities, oidcUser.getIdToken(), new OidcUserInfo(claims), "authco_id");
 
-        } catch (UnverifiedEmailConflictException e) {
+        } catch (UnverifiedEmailException e) {
             throw new OAuth2AuthenticationException(new OAuth2Error("unverified_email", e.getMessage(), null), e);
         }
 
