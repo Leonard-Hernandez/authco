@@ -2,9 +2,11 @@ package authco.config;
 
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.UUID;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.annotation.Order;
@@ -34,6 +36,9 @@ import org.springframework.security.oauth2.server.authorization.settings.TokenSe
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.LoginUrlAuthenticationEntryPoint;
 import org.springframework.security.web.util.matcher.MediaTypeRequestMatcher;
+import org.springframework.web.cors.CorsConfiguration;
+import org.springframework.web.cors.CorsConfigurationSource;
+import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
 import com.nimbusds.jose.jwk.JWK;
 import com.nimbusds.jose.jwk.JWKSet;
@@ -54,6 +59,7 @@ public class AuthorizationServerConfig {
 	@Bean
 	@Order(1)
 	SecurityFilterChain authorizationServerSecurityFilterChain(HttpSecurity http,
+			CorsConfigurationSource corsConfigurationSource,
 			RegisteredClientRepository registeredClientRepository, PasswordEncoder passwordEncoder) throws Exception {
 
 		http.oauth2AuthorizationServer((authorizationServer) -> {
@@ -72,7 +78,9 @@ public class AuthorizationServerConfig {
 
 				.exceptionHandling((exceptions) -> exceptions.defaultAuthenticationEntryPointFor(
 						new LoginUrlAuthenticationEntryPoint("/login"),
-						new MediaTypeRequestMatcher(MediaType.TEXT_HTML)));
+						new MediaTypeRequestMatcher(MediaType.TEXT_HTML)))
+				.cors(cors -> cors.configurationSource(
+						corsConfigurationSource));
 		return http.build();
 	}
 
@@ -80,8 +88,10 @@ public class AuthorizationServerConfig {
 	@Order(2)
 	SecurityFilterChain defaultSecurityFilterChain(HttpSecurity http) {
 
-		// /error must stay open: a 401 from another chain (e.g. the admin Basic auth) is
-		// forwarded there, and requiring login on it turns the 401 into a redirect to /login.
+		// /error must stay open: a 401 from another chain (e.g. the admin Basic auth)
+		// is forwarded there, and requiring login on it turns the 401 into a redirect
+		// to
+		// /login.
 		return http.authorizeHttpRequests((autorize) -> autorize
 				.requestMatchers("/error").permitAll()
 				.anyRequest().authenticated())
@@ -89,6 +99,23 @@ public class AuthorizationServerConfig {
 						oauth -> oauth.loginPage("/login").permitAll()
 								.userInfoEndpoint(userinfo -> userinfo.oidcUserService(federatedOidcUserService)))
 				.build();
+
+	}
+
+	@Bean
+	CorsConfigurationSource corsConfigurationSource(
+			@Value("${authco.cors.allowed-origins}") List<String> allowSites) {
+		CorsConfiguration corsConfiguration = new CorsConfiguration();
+		corsConfiguration.setAllowedOrigins(allowSites);
+		corsConfiguration.setAllowedMethods(Arrays.asList("GET", "POST", "OPTIONS"));
+		corsConfiguration.setAllowCredentials(false);
+		corsConfiguration.setAllowedHeaders(Arrays.asList("Authorization", "Cache-Control", "Content-Type"));
+		corsConfiguration.setMaxAge(3600L);
+
+		UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+		source.registerCorsConfiguration("/**", corsConfiguration);
+
+		return source;
 
 	}
 
@@ -147,8 +174,10 @@ public class AuthorizationServerConfig {
 
 	}
 
-	// After a rotation the JWKS holds several RS256 keys, and NimbusJwtEncoder refuses
-	// to guess which one to sign with. Retired keys are there only for verification.
+	// After a rotation the JWKS holds several RS256 keys, and NimbusJwtEncoder
+	// refuses
+	// to guess which one to sign with. Retired keys are there only for
+	// verification.
 	@Bean
 	JwtEncoder jwtEncoder(JWKSource<SecurityContext> jwkSource, JwkKeyService jwkKeyService) {
 		NimbusJwtEncoder encoder = new NimbusJwtEncoder(jwkSource);
@@ -157,7 +186,8 @@ public class AuthorizationServerConfig {
 			return jwks.stream()
 					.filter(jwk -> activeKeyId.equals(jwk.getKeyID()))
 					.findFirst()
-					.orElseThrow(() -> new IllegalStateException("Active signing key " + activeKeyId + " is not in the JWKS"));
+					.orElseThrow(() -> new IllegalStateException(
+							"Active signing key " + activeKeyId + " is not in the JWKS"));
 		});
 		return encoder;
 	}

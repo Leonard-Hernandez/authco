@@ -35,3 +35,5 @@ authco:
   issuer: http://localhost:8087/authco
   jwk:
     master-key: ${master-key}
+  cors:
+    allowed-origins: http://localhost:4200
