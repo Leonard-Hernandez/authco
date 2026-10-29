@@ -2,6 +2,7 @@ package authco.security;
 
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.util.Collection;
 import java.util.List;
 import java.util.Set;
 import java.util.regex.Matcher;
@@ -35,6 +36,11 @@ public class DynamicClientRegistrationPolicy {
 
     private static final String ERROR_URI = "https://datatracker.ietf.org/doc/html/rfc7591#section-3.2.2";
 
+    private static final String INVALID_CLIENT_METADATA = "invalid_client_metadata";
+
+    /** OIDC registration metadata; RFC 7591 requests may carry it too. */
+    public static final String POST_LOGOUT_REDIRECT_URIS = "post_logout_redirect_uris";
+
     private static final Pattern LOOPBACK_ANY_PORT = Pattern
             .compile("^http://(127\\.0\\.0\\.1|localhost|\\[::1\\]):\\*(/.*)?$");
 
@@ -64,6 +70,22 @@ public class DynamicClientRegistrationPolicy {
     }
 
     /**
+     * Post-logout redirect URIs are optional, but each one must be on the same
+     * allowlist as the redirect URIs: /connect/logout redirects to any URI registered
+     * here, so an unchecked one is an open redirect.
+     */
+    public void validatePostLogoutRedirectUris(Collection<String> postLogoutRedirectUris) {
+        if (postLogoutRedirectUris == null) {
+            return;
+        }
+        for (String postLogoutRedirectUri : postLogoutRedirectUris) {
+            if (!isAllowed(postLogoutRedirectUri)) {
+                throw invalidRegistration(INVALID_CLIENT_METADATA, POST_LOGOUT_REDIRECT_URIS);
+            }
+        }
+    }
+
+    /**
      * Narrows a freshly converted client to what anonymous registration grants: the
      * allowed scopes, the authorization code (plus refresh token) grant, PKCE and
      * short-lived tokens. Rejects any other grant type rather than silently dropping
@@ -71,8 +93,10 @@ public class DynamicClientRegistrationPolicy {
      */
     public RegisteredClient apply(RegisteredClient registeredClient) {
         if (!ALLOWED_GRANT_TYPES.containsAll(registeredClient.getAuthorizationGrantTypes())) {
-            throw invalidRegistration("invalid_client_metadata", "grant_types");
+            throw invalidRegistration(INVALID_CLIENT_METADATA, "grant_types");
         }
+        // Checked again on the converted client, whatever the endpoint's converter mapped.
+        validatePostLogoutRedirectUris(registeredClient.getPostLogoutRedirectUris());
 
         return RegisteredClient.from(registeredClient)
                 .scopes(scopes -> scopes.retainAll(ClientScopes.ALLOWED))
