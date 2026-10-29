@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -161,6 +162,31 @@ class DynamicClientRegistrationIntegrationTest {
         assertEquals(201, result.getResponse().getStatus(), result.getResponse().getContentAsString());
         RegisteredClient client = registeredClientRepository.findByClientId((String) body(result).get("client_id"));
         assertEquals(Set.of("http://127.0.0.1:53682/"), client.getPostLogoutRedirectUris());
+    }
+
+    @Test
+    @DisplayName("registrations beyond the per-IP limit get 429 with Retry-After (limit 50 in the test profile)")
+    void registrationsRateLimitedPerIp() throws Exception {
+        for (int i = 0; i < 50; i++) {
+            mockMvc.perform(post("/oauth2/register")
+                    .with(request -> {
+                        request.setRemoteAddr("203.0.113.50");
+                        return request;
+                    })
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(JSON.writeValueAsString(claudePublicClient())))
+                    .andExpect(status().isCreated());
+        }
+
+        mockMvc.perform(post("/connect/register")
+                .with(request -> {
+                    request.setRemoteAddr("203.0.113.50");
+                    return request;
+                })
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(JSON.writeValueAsString(claudePublicClient())))
+                .andExpect(status().isTooManyRequests())
+                .andExpect(header().exists("Retry-After"));
     }
 
     @Test
