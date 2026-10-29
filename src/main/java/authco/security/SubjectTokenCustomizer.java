@@ -1,18 +1,13 @@
 package authco.security;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
-import java.util.List;
-import java.util.Map;
 import java.util.Set;
 
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.oauth2.core.OAuth2AuthenticationException;
-import org.springframework.security.oauth2.core.OAuth2Error;
 import org.springframework.security.oauth2.core.OAuth2ErrorCodes;
 import org.springframework.security.oauth2.core.endpoint.OAuth2AuthorizationRequest;
 import org.springframework.security.oauth2.core.endpoint.OAuth2ParameterNames;
@@ -33,32 +28,17 @@ import authco.user.repository.UserRepository;
 
 /**
  * Shapes the tokens: subject, user claims, role scopes and, for access tokens, the
- * RFC 8707 audience.
- *
- * <p>
- * {@code authco.resources} lists the canonical URIs of the resource servers tokens can
- * be issued for. A requested {@code resource} that is one of them, or a URI below one
- * of them (an MCP client may send the URL of the MCP endpoint itself), yields that
- * canonical URI as audience. A request without {@code resource} gets the first entry.
- * Anything else is rejected with {@code invalid_target}.
+ * RFC 8707 audience (see {@link ResourceIndicators}).
  */
 @Component
 public class SubjectTokenCustomizer implements OAuth2TokenCustomizer<JwtEncodingContext> {
 
-    /** RFC 8707 resource indicator parameter. */
-    static final String RESOURCE = "resource";
-
-    static final String INVALID_TARGET = "invalid_target";
-
-    private static final String INVALID_TARGET_URI = "https://datatracker.ietf.org/doc/html/rfc8707#section-2";
-
     private final UserRepository userRepository;
-    private final List<String> resources;
+    private final ResourceIndicators resourceIndicators;
 
-    public SubjectTokenCustomizer(UserRepository userRepository,
-            @Value("${authco.resources}") List<String> resources) {
+    public SubjectTokenCustomizer(UserRepository userRepository, ResourceIndicators resourceIndicators) {
         this.userRepository = userRepository;
-        this.resources = resources;
+        this.resourceIndicators = resourceIndicators;
     }
 
     @Override
@@ -113,25 +93,41 @@ public class SubjectTokenCustomizer implements OAuth2TokenCustomizer<JwtEncoding
 
     /**
      * Adds the resource servers the token is meant for to {@code aud}, next to the
-     * client_id Spring Authorization Server already put there. The token request's
-     * {@code resource} wins; without one (e.g. a refresh that omits it), the one sent
-     * to the authorization endpoint is used.
+     * client_id Spring Authorization Server already put there.
+     *
+     * <p>
+     * Resources sent to the authorization endpoint are what the user authorized: a
+     * token request (code exchange or refresh) may narrow them with {@code resource},
+     * never widen them, and without {@code resource} gets all of them. Only when the
+     * authorization request named none is the token request's {@code resource} taken
+     * as is (RFC 8707 allows it on either endpoint).
      */
     private void addAudiences(JwtEncodingContext context) {
-        Set<String> requestedResources = new LinkedHashSet<>();
+        Set<String> requestedResources = Set.of();
         if (context.getAuthorizationGrant() instanceof OAuth2AuthorizationGrantAuthenticationToken grant) {
-            collectResources(grant.getAdditionalParameters(), requestedResources);
+            requestedResources = ResourceIndicators.requestedIn(grant.getAdditionalParameters());
         }
+        Set<String> authorizedResources = Set.of();
         OAuth2Authorization authorization = context.getAuthorization();
-        if (requestedResources.isEmpty() && authorization != null) {
+        if (authorization != null) {
             OAuth2AuthorizationRequest authorizationRequest = authorization
                     .getAttribute(OAuth2AuthorizationRequest.class.getName());
             if (authorizationRequest != null) {
-                collectResources(authorizationRequest.getAdditionalParameters(), requestedResources);
+                authorizedResources = ResourceIndicators.requestedIn(authorizationRequest.getAdditionalParameters());
             }
         }
 
-        Set<String> resourceAudiences = audiencesFor(requestedResources);
+        Set<String> resourceAudiences;
+        if (authorizedResources.isEmpty()) {
+            resourceAudiences = resourceIndicators.audiencesFor(requestedResources);
+        } else {
+            Set<String> authorizedAudiences = resourceIndicators.audiencesFor(authorizedResources);
+            resourceAudiences = requestedResources.isEmpty() ? authorizedAudiences
+                    : resourceIndicators.audiencesFor(requestedResources);
+            if (!authorizedAudiences.containsAll(resourceAudiences)) {
+                throw ResourceIndicators.invalidTarget("The requested resource was not authorized");
+            }
+        }
 
         context.getClaims().claims(claims -> {
             Set<String> audiences = new LinkedHashSet<>();
@@ -147,49 +143,6 @@ public class SubjectTokenCustomizer implements OAuth2TokenCustomizer<JwtEncoding
             // Jackson's allowlist rejects JDK immutable collections when reading them back.
             claims.put(JwtClaimNames.AUD, new ArrayList<>(audiences));
         });
-    }
-
-    private Set<String> audiencesFor(Set<String> requestedResources) {
-        Set<String> audiences = new LinkedHashSet<>();
-        if (requestedResources.isEmpty()) {
-            if (!resources.isEmpty()) {
-                audiences.add(resources.getFirst());
-            }
-            return audiences;
-        }
-        for (String requested : requestedResources) {
-            audiences.add(resources.stream()
-                    .filter(resource -> matchesResource(requested, resource))
-                    .findFirst()
-                    .orElseThrow(() -> new OAuth2AuthenticationException(new OAuth2Error(INVALID_TARGET,
-                            "The requested resource is not served by this authorization server",
-                            INVALID_TARGET_URI))));
-        }
-        return audiences;
-    }
-
-    private static boolean matchesResource(String requested, String resource) {
-        String base = stripTrailingSlash(resource);
-        String candidate = stripTrailingSlash(requested);
-        // A path boundary is required: .../v1 must not match .../v1-admin.
-        return candidate.equals(base) || candidate.startsWith(base + "/");
-    }
-
-    private static String stripTrailingSlash(String uri) {
-        return uri.endsWith("/") ? uri.substring(0, uri.length() - 1) : uri;
-    }
-
-    // Repeated parameters arrive as String[] from the request and as a list once the
-    // authorization request has been stored and read back.
-    private static void collectResources(Map<String, Object> parameters, Set<String> into) {
-        Object value = parameters.get(RESOURCE);
-        if (value instanceof String resource) {
-            into.add(resource);
-        } else if (value instanceof String[] resources) {
-            into.addAll(Arrays.asList(resources));
-        } else if (value instanceof Collection<?> resources) {
-            resources.forEach(resource -> into.add(resource.toString()));
-        }
     }
 
 }
