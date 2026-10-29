@@ -7,8 +7,8 @@ server:
     # tokens carry iss=${authco.issuer}.
     context-path: /authco
     session:
-      # Lifetime of the login session (what silent renewal with prompt=none relies
-      # on): Spring Boot default 30m, override with SERVER_SERVLET_SESSION_TIMEOUT.
+      # Lifetime of the login session: Spring Boot default 30m, override with
+      # SERVER_SERVLET_SESSION_TIMEOUT.
       tracking-modes:
       - cookie
   port: 8087
@@ -61,8 +61,8 @@ authco:
     # legacy `master-key` entry of a local .env.
     master-key: ${MASTER_KEY:${master-key}}
   cors:
-    # SPA origins: allowed by CORS and allowed to frame the login/authorize pages
-    # (CSP frame-ancestors) for silent renewal with prompt=none.
+    # SPA origins allowed by CORS (token, userinfo, discovery... from the browser).
+    # No page of authco can be framed (X-Frame-Options: DENY).
     allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:4200}
   dcr:
     # Redirect URIs anonymous Dynamic Client Registration accepts. Exact URIs, plus
