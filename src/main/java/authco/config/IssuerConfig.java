@@ -46,8 +46,8 @@ public class IssuerConfig {
 		return (issuers.size() == 1 ? settings.issuer(issuers.getFirst()) : settings).build();
 	}
 
-	// Right after the ForwardedHeaderFilter (HIGHEST_PRECEDENCE), so the origin checked
-	// is the public one from X-Forwarded-*, and before the security filter chains.
+	// Before the security filter chains. The origin checked is the public one: Tomcat's
+	// RemoteIpValve has already applied X-Forwarded-* from trusted proxies.
 	@Bean
 	FilterRegistrationBean<IssuerAllowlistFilter> issuerAllowlistFilter(
 			@Value("${authco.issuer}") List<String> issuers) {
