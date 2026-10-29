@@ -2,11 +2,11 @@ package authco.client;
 
 import java.net.URI;
 import java.security.SecureRandom;
-import java.time.Duration;
 import java.time.Instant;
 import java.util.Base64;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
@@ -26,6 +26,7 @@ import authco.client.exception.ClientAlreadyExistsException;
 import authco.client.exception.ClientNotFoundException;
 import authco.client.exception.InvalidClientException;
 import authco.security.ClientScopes;
+import authco.security.TokenLifetimes;
 import lombok.RequiredArgsConstructor;
 
 /**
@@ -38,10 +39,11 @@ import lombok.RequiredArgsConstructor;
 @RequiredArgsConstructor
 public class ClientAdminService {
 
-    private static final Duration ACCESS_TOKEN_TTL = Duration.ofMinutes(15);
-    private static final Duration REFRESH_TOKEN_TTL = Duration.ofDays(1);
     private static final int SECRET_BYTES = 32;
     private static final Set<String> LOCAL_HOSTS = Set.of("localhost", "127.0.0.1", "[::1]");
+    // RFC 6761: *.localhost always resolves to loopback, e.g. the finco.localhost host
+    // of the local Kubernetes ingress.
+    private static final String LOCAL_HOST_SUFFIX = ".localhost";
 
     private final RegisteredClientRepository registeredClientRepository;
     private final JdbcTemplate jdbcTemplate;
@@ -85,8 +87,8 @@ public class ClientAdminService {
                         .requireAuthorizationConsent(definition.requireConsent())
                         .build())
                 .tokenSettings(TokenSettings.builder()
-                        .accessTokenTimeToLive(ACCESS_TOKEN_TTL)
-                        .refreshTokenTimeToLive(REFRESH_TOKEN_TTL)
+                        .accessTokenTimeToLive(TokenLifetimes.ACCESS_TOKEN)
+                        .refreshTokenTimeToLive(TokenLifetimes.REFRESH_TOKEN)
                         .build());
 
         String clearSecret = null;
@@ -162,8 +164,9 @@ public class ClientAdminService {
         }
     }
 
-    // Absolute, exact URIs only. Plain http is accepted for local development hosts;
-    // anywhere else the authorization code would travel unencrypted.
+    // Absolute, exact URIs only. Plain http is accepted for loopback hosts (localhost,
+    // 127.0.0.1, [::1], *.localhost); anywhere else the authorization code would travel
+    // unencrypted.
     private static void validateUri(String value) {
         URI uri;
         try {
@@ -178,10 +181,16 @@ public class ClientAdminService {
             throw new InvalidClientException("Redirect URIs cannot contain a fragment: " + value);
         }
         boolean https = "https".equals(uri.getScheme());
-        boolean localHttp = "http".equals(uri.getScheme()) && LOCAL_HOSTS.contains(uri.getHost());
+        boolean localHttp = "http".equals(uri.getScheme()) && isLocalHost(uri.getHost());
         if (!https && !localHttp) {
-            throw new InvalidClientException("Redirect URIs must use https (http only for localhost): " + value);
+            throw new InvalidClientException(
+                    "Redirect URIs must use https (http only for localhost, 127.0.0.1, [::1] and *.localhost): " + value);
         }
+    }
+
+    private static boolean isLocalHost(String host) {
+        String lower = host.toLowerCase(Locale.ROOT);
+        return LOCAL_HOSTS.contains(lower) || lower.endsWith(LOCAL_HOST_SUFFIX);
     }
 
     private static String generateSecret() {

@@ -1,16 +1,21 @@
 server:
+  # Honor X-Forwarded-* from the ingress / reverse proxy (redirects, request URLs).
+  # The issuer itself comes from authco.issuer: pinned, or picked from its allowlist.
+  forward-headers-strategy: framework
   servlet:
     # Every endpoint lives under /authco, and the issuer follows it:
-    # tokens carry iss=http://localhost:8087/authco.
+    # tokens carry iss=${authco.issuer}.
     context-path: /authco
     session:
+      # Lifetime of the login session (what silent renewal with prompt=none relies
+      # on): Spring Boot default 30m, override with SERVER_SERVLET_SESSION_TIMEOUT.
       tracking-modes:
       - cookie
   port: 8087
 
 spring:
   datasource:
-    url: jdbc:postgresql://localhost:5432/authco?createDatabaseIfNotExist=true
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/authco}
     username: ${USER_DB}
     password: ${PASSWORD_DB}
   jpa:
@@ -31,9 +36,47 @@ spring:
             client-name: Google
             authorization-grant-type: authorization_code
 
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      probes:
+        # /actuator/health/liveness and /actuator/health/readiness
+        enabled: true
+      group:
+        readiness:
+          include: readinessState,db
+
 authco:
-  issuer: http://localhost:8087/authco
+  # Public issuer: exact `iss` of every token and base of the discovery documents.
+  # Comma-separated when one authco serves apps on several origins: each request then
+  # gets the issuer of the origin it came through, and any other origin is served as
+  # the first one (see IssuerConfig).
+  issuer: ${AUTHCO_ISSUER:http://localhost:8087/authco}
   jwk:
-    master-key: ${master-key}
+    # AES-256 key (base64) that encrypts the signing keys at rest. MASTER_KEY, or the
+    # legacy `master-key` entry of a local .env.
+    master-key: ${MASTER_KEY:${master-key}}
   cors:
-    allowed-origins: http://localhost:4200
+    # SPA origins: allowed by CORS and allowed to frame the login/authorize pages
+    # (CSP frame-ancestors) for silent renewal with prompt=none.
+    allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:4200}
+  dcr:
+    # Redirect URIs anonymous Dynamic Client Registration accepts. Exact URIs, plus
+    # loopback with any port (RFC 8252): http://127.0.0.1:*, http://localhost:*.
+    allowed-redirect-uris: ${AUTHCO_DCR_ALLOWED_REDIRECT_URIS:https://claude.ai/api/mcp/auth_callback,https://claude.com/api/mcp/auth_callback,http://127.0.0.1:*,http://localhost:*}
+  # RFC 8707: canonical URIs of the resource servers tokens can be requested for. A
+  # `resource` equal to (or below) one of them puts that URI in `aud`; without
+  # `resource`, the first entry is the audience.
+  resources: ${AUTHCO_RESOURCES:}
+  # Seeds the local demo client `oidc-client` (well-known secret). Never in production.
+  seed-demo-client: ${AUTHCO_SEED_DEMO_CLIENT:false}
+  # First-party SPA seeded as a public PKCE client (no consent, no refresh tokens).
+  # Disabled while client-id is empty. Created only if missing; then the admin API owns it.
+  spa-client:
+    client-id: ${AUTHCO_SPA_CLIENT_ID:}
+    redirect-uris: ${AUTHCO_SPA_CLIENT_REDIRECT_URIS:}
+    post-logout-redirect-uris: ${AUTHCO_SPA_CLIENT_POST_LOGOUT_REDIRECT_URIS:}

@@ -1,0 +1,47 @@
+# Local stack: Postgres + authco. Secrets come from .env (never committed):
+#   USER_DB, PASSWORD_DB, MASTER_KEY (or master-key), GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET
+services:
+  postgres:
+    image: postgres:17
+    environment:
+      POSTGRES_DB: authco
+      POSTGRES_USER: ${USER_DB}
+      POSTGRES_PASSWORD: ${PASSWORD_DB}
+    ports:
+      - "5432:5432"
+    volumes:
+      - authco-postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d authco"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  authco:
+    build: .
+    image: leonard20/authco:latest
+    depends_on:
+      postgres:
+        condition: service_healthy
+    env_file: .env
+    environment:
+      # Only what differs from application.yml (issuer, CORS... keep their defaults).
+      DB_URL: jdbc:postgresql://postgres:5432/authco
+      AUTHCO_RESOURCES: ${AUTHCO_RESOURCES:-http://localhost:8086/finco-api/v1}
+      # Local dev: finco-site on `ng serve` (http://localhost:4200) needs a client to
+      # log in, so it is seeded as a public PKCE client. Set AUTHCO_SPA_CLIENT_ID=
+      # (empty) in .env to skip it.
+      AUTHCO_SPA_CLIENT_ID: ${AUTHCO_SPA_CLIENT_ID-finco-site}
+      AUTHCO_SPA_CLIENT_REDIRECT_URIS: ${AUTHCO_SPA_CLIENT_REDIRECT_URIS:-http://localhost:4200/auth/callback}
+      AUTHCO_SPA_CLIENT_POST_LOGOUT_REDIRECT_URIS: ${AUTHCO_SPA_CLIENT_POST_LOGOUT_REDIRECT_URIS:-http://localhost:4200/}
+    ports:
+      - "8087:8087"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8087/authco/actuator/health/readiness || exit 1"]
+      interval: 10s
+      timeout: 5s
+      start_period: 60s
+      retries: 5
+
+volumes:
+  authco-postgres:
