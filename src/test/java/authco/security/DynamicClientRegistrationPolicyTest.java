@@ -20,7 +20,9 @@ class DynamicClientRegistrationPolicyTest {
             "https://claude.ai/api/mcp/auth_callback",
             "https://claude.com/api/mcp/auth_callback",
             "http://127.0.0.1:*",
-            "http://localhost:*/callback"));
+            "http://localhost:*/callback",
+            // Not loopback (RFC 8252): the wildcard port is never honored for it.
+            "http://finco.localhost:*"));
 
     @ParameterizedTest
     @ValueSource(strings = {
@@ -44,6 +46,7 @@ class DynamicClientRegistrationPolicyTest {
             "http://127.0.0.1.evil.com:8888/callback",
             "http://user@127.0.0.1:8888/callback",
             "http://localhost:4000/other",
+            "http://finco.localhost:4000/callback",
             "not a uri" })
     @DisplayName("anything else is rejected")
     void rejected(String redirectUri) {

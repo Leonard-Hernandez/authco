@@ -41,8 +41,8 @@ public class DynamicClientRegistrationPolicy {
     /** OIDC registration metadata; RFC 7591 requests may carry it too. */
     public static final String POST_LOGOUT_REDIRECT_URIS = "post_logout_redirect_uris";
 
-    private static final Pattern LOOPBACK_ANY_PORT = Pattern
-            .compile("^http://(127\\.0\\.0\\.1|localhost|\\[::1\\]):\\*(/.*)?$");
+    // http://<host>:*[/path]; the host must then be loopback (Uris#isLoopbackHost).
+    private static final Pattern ANY_PORT = Pattern.compile("^http://([^/]+):\\*(/.*)?$");
 
     private static final Set<AuthorizationGrantType> ALLOWED_GRANT_TYPES = Set.of(
             AuthorizationGrantType.AUTHORIZATION_CODE, AuthorizationGrantType.REFRESH_TOKEN);
@@ -130,8 +130,8 @@ public class DynamicClientRegistrationPolicy {
     }
 
     private static boolean matchesLoopbackAnyPort(String allowed, URI candidate) {
-        Matcher matcher = LOOPBACK_ANY_PORT.matcher(allowed);
-        if (!matcher.matches()) {
+        Matcher matcher = ANY_PORT.matcher(allowed);
+        if (!matcher.matches() || !Uris.isLoopbackHost(matcher.group(1))) {
             return false;
         }
         String host = matcher.group(1);

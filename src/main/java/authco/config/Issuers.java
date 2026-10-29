@@ -5,6 +5,8 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
 
+import authco.security.Uris;
+
 /**
  * The issuers authco answers as ({@code authco.issuer}), normalized so that equivalent
  * spellings compare equal: lowercase scheme and host, no default port (:443 for
@@ -61,8 +63,7 @@ public final class Issuers {
         if (!defaultPort) {
             normalized.append(':').append(port);
         }
-        String path = parsed.getRawPath() == null ? "" : parsed.getRawPath();
-        normalized.append(path.endsWith("/") ? path.substring(0, path.length() - 1) : path);
+        normalized.append(Uris.stripTrailingSlash(parsed.getRawPath() == null ? "" : parsed.getRawPath()));
         return normalized.toString();
     }
 
