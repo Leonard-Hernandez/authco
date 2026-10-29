@@ -50,6 +50,7 @@ public class AnonymousClientRegistrationAuthenticationProvider implements Authen
 		OidcClientRegistration oidcClientRegistration = clientRegistrationAuthentication.getClientRegistration();
 
 		registrationPolicy.validateRedirectUris(oidcClientRegistration.getRedirectUris());
+		registrationPolicy.validatePostLogoutRedirectUris(oidcClientRegistration.getPostLogoutRedirectUris());
 
 		RegisteredClient registeredClient = registeredClientConverter.convert(oidcClientRegistration);
 		if (ClientAuthenticationMethod.NONE.getValue()

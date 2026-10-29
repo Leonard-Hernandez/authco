@@ -1,13 +1,18 @@
 package authco.security;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.List;
 
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
+import org.springframework.security.oauth2.core.OAuth2AuthenticationException;
 
 class DynamicClientRegistrationPolicyTest {
 
@@ -43,6 +48,18 @@ class DynamicClientRegistrationPolicyTest {
     @DisplayName("anything else is rejected")
     void rejected(String redirectUri) {
         assertFalse(policy.isAllowed(redirectUri));
+    }
+
+    @Test
+    @DisplayName("post-logout redirect URIs are optional but must be allowlisted")
+    void postLogoutRedirectUris() {
+        assertDoesNotThrow(() -> policy.validatePostLogoutRedirectUris(null));
+        assertDoesNotThrow(() -> policy.validatePostLogoutRedirectUris(List.of()));
+        assertDoesNotThrow(() -> policy.validatePostLogoutRedirectUris(List.of("http://127.0.0.1:8888/")));
+
+        OAuth2AuthenticationException ex = assertThrows(OAuth2AuthenticationException.class,
+                () -> policy.validatePostLogoutRedirectUris(List.of("https://evil.example.com/")));
+        assertEquals("invalid_client_metadata", ex.getError().getErrorCode());
     }
 
 }

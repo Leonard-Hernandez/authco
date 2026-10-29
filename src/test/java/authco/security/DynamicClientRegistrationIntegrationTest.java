@@ -134,6 +134,35 @@ class DynamicClientRegistrationIntegrationTest {
                 .andExpect(jsonPath("$.error").value("invalid_redirect_uri"));
     }
 
+    @ParameterizedTest
+    @ValueSource(strings = { "/connect/register", "/oauth2/register" })
+    @DisplayName("a post-logout redirect URI outside the allowlist is rejected (no open redirect via logout)")
+    void unknownPostLogoutRedirectUriRejected(String endpoint) throws Exception {
+        mockMvc.perform(post(endpoint)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(JSON.writeValueAsString(Map.of(
+                        "redirect_uris", List.of(CLAUDE_CALLBACK),
+                        "post_logout_redirect_uris", List.of("https://evil.example.com/"),
+                        "grant_types", List.of("authorization_code"),
+                        "token_endpoint_auth_method", "none"))))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value("invalid_client_metadata"));
+    }
+
+    @Test
+    @DisplayName("an allowlisted post-logout redirect URI is registered")
+    void allowedPostLogoutRedirectUriRegistered() throws Exception {
+        MvcResult result = register("/connect/register", Map.of(
+                "redirect_uris", List.of(CLAUDE_CALLBACK),
+                "post_logout_redirect_uris", List.of("http://127.0.0.1:53682/"),
+                "grant_types", List.of("authorization_code"),
+                "token_endpoint_auth_method", "none"));
+
+        assertEquals(201, result.getResponse().getStatus(), result.getResponse().getContentAsString());
+        RegisteredClient client = registeredClientRepository.findByClientId((String) body(result).get("client_id"));
+        assertEquals(Set.of("http://127.0.0.1:53682/"), client.getPostLogoutRedirectUris());
+    }
+
     @Test
     @DisplayName("a loopback redirect URI is accepted on any port (RFC 8252)")
     void loopbackAnyPortAccepted() throws Exception {

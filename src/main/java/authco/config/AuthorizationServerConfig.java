@@ -130,6 +130,10 @@ public class AuthorizationServerConfig {
 				.andThen(context -> {
 					OAuth2ClientRegistrationAuthenticationToken registration = context.getAuthentication();
 					registrationPolicy.validateRedirectUris(registration.getClientRegistration().getRedirectUris());
+					// Not RFC 7591 metadata (the stock converter drops it), but rejected rather
+					// than ignored if sent with a URI outside the allowlist.
+					registrationPolicy.validatePostLogoutRedirectUris(registration.getClientRegistration()
+							.getClaimAsStringList(DynamicClientRegistrationPolicy.POST_LOGOUT_REDIRECT_URIS));
 				}));
 
 		OAuth2ClientRegistrationRegisteredClientConverter converter = new OAuth2ClientRegistrationRegisteredClientConverter();
