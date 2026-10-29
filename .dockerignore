@@ -1,0 +1,8 @@
+build
+.gradle
+bin
+.env
+.git
+.atl
+.claude
+.vscode

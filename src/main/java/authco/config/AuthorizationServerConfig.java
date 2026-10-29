@@ -1,6 +1,5 @@
 package authco.config;
 
-import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -13,6 +12,7 @@ import org.springframework.core.annotation.Order;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.config.annotation.web.configurers.HeadersConfigurer;
 import org.springframework.security.config.annotation.web.configuration.OAuth2AuthorizationServerConfiguration;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder.BCryptVersion;
@@ -27,15 +27,21 @@ import org.springframework.security.oauth2.server.authorization.JdbcOAuth2Author
 import org.springframework.security.oauth2.server.authorization.JdbcOAuth2AuthorizationService;
 import org.springframework.security.oauth2.server.authorization.OAuth2AuthorizationConsentService;
 import org.springframework.security.oauth2.server.authorization.OAuth2AuthorizationService;
+import org.springframework.security.oauth2.server.authorization.authentication.OAuth2ClientRegistrationAuthenticationProvider;
+import org.springframework.security.oauth2.server.authorization.authentication.OAuth2ClientRegistrationAuthenticationToken;
+import org.springframework.security.oauth2.server.authorization.authentication.OAuth2ClientRegistrationAuthenticationValidator;
 import org.springframework.security.oauth2.server.authorization.client.JdbcRegisteredClientRepository;
 import org.springframework.security.oauth2.server.authorization.client.RegisteredClient;
 import org.springframework.security.oauth2.server.authorization.client.RegisteredClientRepository;
-import org.springframework.security.oauth2.server.authorization.settings.AuthorizationServerSettings;
+import org.springframework.security.oauth2.server.authorization.converter.OAuth2ClientRegistrationRegisteredClientConverter;
 import org.springframework.security.oauth2.server.authorization.settings.ClientSettings;
 import org.springframework.security.oauth2.server.authorization.settings.TokenSettings;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.LoginUrlAuthenticationEntryPoint;
+import org.springframework.security.web.servlet.util.matcher.PathPatternRequestMatcher;
+import org.springframework.security.web.util.matcher.AndRequestMatcher;
 import org.springframework.security.web.util.matcher.MediaTypeRequestMatcher;
+import org.springframework.security.web.util.matcher.RequestMatcher;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
@@ -47,12 +53,22 @@ import com.nimbusds.jose.proc.SecurityContext;
 
 import authco.jwk.JwkKeyService;
 import authco.security.AnonymousClientRegistrationAuthenticationProvider;
+import authco.security.DynamicClientRegistrationPolicy;
 import authco.security.FederatedOidcUserService;
+import authco.security.TokenLifetimes;
 import lombok.AllArgsConstructor;
 
 @Configuration
 @AllArgsConstructor
 public class AuthorizationServerConfig {
+
+	// SAS runs the authorization endpoint after AuthorizationFilter, so without this an
+	// anonymous prompt=none request is sent to /login instead of getting SAS's
+	// error=login_required on the client's redirect URI. Sessions still apply: with
+	// one, the code is issued as usual.
+	private static final RequestMatcher SILENT_AUTHORIZATION_REQUEST = new AndRequestMatcher(
+			PathPatternRequestMatcher.pathPattern("/oauth2/authorize"),
+			request -> "none".equals(request.getParameter("prompt")));
 
 	private final FederatedOidcUserService federatedOidcUserService;
 
@@ -60,46 +76,100 @@ public class AuthorizationServerConfig {
 	@Order(1)
 	SecurityFilterChain authorizationServerSecurityFilterChain(HttpSecurity http,
 			CorsConfigurationSource corsConfigurationSource,
-			RegisteredClientRepository registeredClientRepository, PasswordEncoder passwordEncoder) throws Exception {
+			RegisteredClientRepository registeredClientRepository, PasswordEncoder passwordEncoder,
+			DynamicClientRegistrationPolicy registrationPolicy,
+			@Value("${authco.cors.allowed-origins}") List<String> allowedOrigins) throws Exception {
 
 		http.oauth2AuthorizationServer((authorizationServer) -> {
 			authorizationServer
 					.authorizationEndpoint(endpoint -> endpoint.consentPage("/oauth2/consent"))
+					// RFC 7591 registration (/oauth2/register), advertised in
+					// /.well-known/oauth-authorization-server: what MCP clients look for.
+					.clientRegistrationEndpoint(reg -> reg
+							.openRegistrationAllowed(true)
+							.authenticationProviders(providers -> providers.forEach(provider -> {
+								if (provider instanceof OAuth2ClientRegistrationAuthenticationProvider registration) {
+									applyRegistrationPolicy(registration, registrationPolicy);
+								}
+							})))
+					// OIDC registration (/connect/register), advertised in
+					// /.well-known/openid-configuration.
 					.oidc(oidc -> oidc.clientRegistrationEndpoint(reg -> reg.authenticationProviders(providers -> {
 						providers.clear();
 						providers.add(new AnonymousClientRegistrationAuthenticationProvider(registeredClientRepository,
-								passwordEncoder));
+								passwordEncoder, registrationPolicy));
 					})));
 			http.securityMatcher(authorizationServer.getEndpointsMatcher());
 		})
 				.authorizeHttpRequests((autorize) -> autorize
-						.requestMatchers("/connect/register").permitAll()
+						.requestMatchers("/connect/register", "/oauth2/register").permitAll()
+						.requestMatchers(SILENT_AUTHORIZATION_REQUEST).permitAll()
 						.anyRequest().authenticated())
 
 				.exceptionHandling((exceptions) -> exceptions.defaultAuthenticationEntryPointFor(
 						new LoginUrlAuthenticationEntryPoint("/login"),
 						new MediaTypeRequestMatcher(MediaType.TEXT_HTML)))
 				.cors(cors -> cors.configurationSource(
-						corsConfigurationSource));
+						corsConfigurationSource))
+				.headers(headers -> allowFramingBy(headers, allowedOrigins));
 		return http.build();
+	}
+
+	/**
+	 * Same anonymous policy as {@link AnonymousClientRegistrationAuthenticationProvider}.
+	 * The stock RFC 7591 converter already handles public clients
+	 * ({@code token_endpoint_auth_method=none}) and the provider only hashes secrets
+	 * that exist. Requested scopes are narrowed by the policy instead of rejected, as on
+	 * the OIDC endpoint.
+	 */
+	private static void applyRegistrationPolicy(OAuth2ClientRegistrationAuthenticationProvider provider,
+			DynamicClientRegistrationPolicy registrationPolicy) {
+		provider.setAuthenticationValidator(OAuth2ClientRegistrationAuthenticationValidator.DEFAULT_REDIRECT_URI_VALIDATOR
+				.andThen(OAuth2ClientRegistrationAuthenticationValidator.DEFAULT_JWK_SET_URI_VALIDATOR)
+				.andThen(OAuth2ClientRegistrationAuthenticationValidator.SIMPLE_SCOPE_VALIDATOR)
+				.andThen(context -> {
+					OAuth2ClientRegistrationAuthenticationToken registration = context.getAuthentication();
+					registrationPolicy.validateRedirectUris(registration.getClientRegistration().getRedirectUris());
+				}));
+
+		OAuth2ClientRegistrationRegisteredClientConverter converter = new OAuth2ClientRegistrationRegisteredClientConverter();
+		provider.setRegisteredClientConverter(
+				clientRegistration -> registrationPolicy.apply(converter.convert(clientRegistration)));
 	}
 
 	@Bean
 	@Order(2)
-	SecurityFilterChain defaultSecurityFilterChain(HttpSecurity http) {
+	SecurityFilterChain defaultSecurityFilterChain(HttpSecurity http,
+			@Value("${authco.cors.allowed-origins}") List<String> allowedOrigins) {
 
 		// /error must stay open: a 401 from another chain (e.g. the admin Basic auth)
 		// is forwarded there, and requiring login on it turns the 401 into a redirect
 		// to
 		// /login.
+		// Health probes are unauthenticated (show-details is never, so they only expose
+		// UP/DOWN). They must be listed before anyRequest().
 		return http.authorizeHttpRequests((autorize) -> autorize
-				.requestMatchers("/error").permitAll()
+				.requestMatchers("/error", "/actuator/health", "/actuator/health/**").permitAll()
 				.anyRequest().authenticated())
 				.oauth2Login(
 						oauth -> oauth.loginPage("/login").permitAll()
 								.userInfoEndpoint(userinfo -> userinfo.oidcUserService(federatedOidcUserService)))
+				.headers(headers -> allowFramingBy(headers, allowedOrigins))
 				.build();
 
+	}
+
+	/**
+	 * Silent authentication: the SPA renews its tokens in a hidden iframe pointed at
+	 * /oauth2/authorize?prompt=none, which the default X-Frame-Options: DENY would block.
+	 * Framing is allowed only for this server and the CORS origins (the SPAs), through
+	 * CSP frame-ancestors, which supersedes X-Frame-Options and supports an allowlist.
+	 * Covers both chains, since the iframe may land on /login when there is no session.
+	 */
+	private static void allowFramingBy(HeadersConfigurer<HttpSecurity> headers, List<String> allowedOrigins) {
+		headers.frameOptions(frameOptions -> frameOptions.disable())
+				.contentSecurityPolicy(csp -> csp
+						.policyDirectives(("frame-ancestors 'self' " + String.join(" ", allowedOrigins)).trim()));
 	}
 
 	@Bean
@@ -120,10 +190,13 @@ public class AuthorizationServerConfig {
 	}
 
 	@Bean
-	RegisteredClientRepository registeredClientRepository(JdbcTemplate jdbcTemplate) {
+	RegisteredClientRepository registeredClientRepository(JdbcTemplate jdbcTemplate,
+			@Value("${authco.seed-demo-client}") boolean seedDemoClient) {
 		JdbcRegisteredClientRepository repository = new JdbcRegisteredClientRepository(jdbcTemplate);
 
-		if (repository.findByClientId("oidc-client") == null) {
+		// Local demo client only (well-known secret, loopback redirect): never seeded
+		// unless explicitly enabled.
+		if (seedDemoClient && repository.findByClientId("oidc-client") == null) {
 			RegisteredClient oidcClient = RegisteredClient.withId(UUID.randomUUID().toString())
 					.clientId("oidc-client")
 					.clientSecret("{noop}secret")
@@ -139,8 +212,8 @@ public class AuthorizationServerConfig {
 							.requireProofKey(true)
 							.requireAuthorizationConsent(true)
 							.build())
-					.tokenSettings(TokenSettings.builder().accessTokenTimeToLive(Duration.ofMinutes(15))
-							.refreshTokenTimeToLive(Duration.ofDays(1)).build())
+					.tokenSettings(TokenSettings.builder().accessTokenTimeToLive(TokenLifetimes.ACCESS_TOKEN)
+							.refreshTokenTimeToLive(TokenLifetimes.REFRESH_TOKEN).build())
 					.build();
 
 			repository.save(oidcClient);
@@ -195,11 +268,6 @@ public class AuthorizationServerConfig {
 	@Bean
 	JwtDecoder jwtDecoder(JWKSource<SecurityContext> jwkSource) {
 		return OAuth2AuthorizationServerConfiguration.jwtDecoder(jwkSource);
-	}
-
-	@Bean
-	AuthorizationServerSettings authorizationServerSettings() {
-		return AuthorizationServerSettings.builder().build();
 	}
 
 	@Bean
