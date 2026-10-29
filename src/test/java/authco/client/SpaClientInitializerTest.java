@@ -1,7 +1,9 @@
 package authco.client;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -15,6 +17,8 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.security.oauth2.server.authorization.client.RegisteredClient;
 import org.springframework.security.oauth2.server.authorization.client.RegisteredClientRepository;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -77,6 +81,24 @@ class SpaClientInitializerTest {
         initializer.run(null);
 
         verify(clientAdminService, never()).create(any());
+    }
+
+    @Test
+    @DisplayName("losing the startup race to another replica counts as already seeded")
+    void anotherReplicaSeededFirst() {
+        when(clientAdminService.create(any())).thenThrow(new DuplicateKeyException("client_id"));
+        // Missing at the first check, present once the other replica's insert committed.
+        when(registeredClientRepository.findByClientId(CLIENT_ID)).thenReturn(null, mock(RegisteredClient.class));
+
+        assertDoesNotThrow(() -> initializer.run(null));
+    }
+
+    @Test
+    @DisplayName("an integrity violation while the client is still missing is a real failure")
+    void integrityViolationWithoutClientFails() {
+        when(clientAdminService.create(any())).thenThrow(new DataIntegrityViolationException("other"));
+
+        assertThrows(DataIntegrityViolationException.class, () -> initializer.run(null));
     }
 
 }
