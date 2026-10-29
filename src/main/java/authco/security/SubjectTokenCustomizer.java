@@ -23,26 +23,32 @@ import org.springframework.security.oauth2.server.authorization.token.JwtEncodin
 import org.springframework.security.oauth2.server.authorization.token.OAuth2TokenCustomizer;
 import org.springframework.stereotype.Component;
 
+import authco.config.Issuers;
 import authco.user.UserEntity;
 import authco.user.repository.UserRepository;
 
 /**
- * Shapes the tokens: subject, user claims, role scopes and, for access tokens, the
- * RFC 8707 audience (see {@link ResourceIndicators}).
+ * Shapes the tokens: issuer, subject, user claims, role scopes and, for access tokens,
+ * the RFC 8707 audience (see {@link ResourceIndicators}).
  */
 @Component
 public class SubjectTokenCustomizer implements OAuth2TokenCustomizer<JwtEncodingContext> {
 
     private final UserRepository userRepository;
     private final ResourceIndicators resourceIndicators;
+    private final Issuers issuers;
 
-    public SubjectTokenCustomizer(UserRepository userRepository, ResourceIndicators resourceIndicators) {
+    public SubjectTokenCustomizer(UserRepository userRepository, ResourceIndicators resourceIndicators,
+            Issuers issuers) {
         this.userRepository = userRepository;
         this.resourceIndicators = resourceIndicators;
+        this.issuers = issuers;
     }
 
     @Override
     public void customize(JwtEncodingContext context) {
+
+        bindIssuer(context);
 
         if (OAuth2TokenType.ACCESS_TOKEN.equals(context.getTokenType())) {
             addAudiences(context);
@@ -89,6 +95,28 @@ public class SubjectTokenCustomizer implements OAuth2TokenCustomizer<JwtEncoding
 
         }
 
+    }
+
+    /**
+     * With several issuers, the tokens of an authorization carry the issuer of the
+     * origin its /oauth2/authorize went through, not the one of the token request: the
+     * code exchange and refreshes are often back-channel calls (app B's backend calling
+     * http://authco:8087), which the request-based resolution would serve as the first
+     * issuer, and app B's resource server would reject. The stored authorization URI
+     * was built from the request after IssuerAllowlistFilter, so it is always under a
+     * configured issuer.
+     */
+    private void bindIssuer(JwtEncodingContext context) {
+        OAuth2Authorization authorization = context.getAuthorization();
+        if (!issuers.isMultiple() || authorization == null) {
+            return;
+        }
+        OAuth2AuthorizationRequest authorizationRequest = authorization
+                .getAttribute(OAuth2AuthorizationRequest.class.getName());
+        if (authorizationRequest != null) {
+            issuers.issuerOf(authorizationRequest.getAuthorizationUri())
+                    .ifPresent(issuer -> context.getClaims().issuer(issuer));
+        }
     }
 
     /**

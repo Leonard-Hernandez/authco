@@ -62,7 +62,8 @@ authco:
   # Public issuer: exact `iss` of every token and base of the discovery documents.
   # Comma-separated when one authco serves apps on several origins: each request then
   # gets the issuer of the origin it came through, and any other origin is served as
-  # the first one (see IssuerConfig).
+  # the first one; tokens keep the issuer their authorization started on (see
+  # IssuerConfig). Entries are normalized (lowercase host, no :443/:80, no trailing /).
   issuer: ${AUTHCO_ISSUER:http://localhost:8087/authco}
   jwk:
     # AES-256 key (base64) that encrypts the signing keys at rest. MASTER_KEY, or the

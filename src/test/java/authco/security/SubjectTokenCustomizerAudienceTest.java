@@ -33,6 +33,7 @@ import org.springframework.security.oauth2.server.authorization.authentication.O
 import org.springframework.security.oauth2.server.authorization.client.RegisteredClient;
 import org.springframework.security.oauth2.server.authorization.token.JwtEncodingContext;
 
+import authco.config.Issuers;
 import authco.user.UserEntity;
 import authco.user.repository.UserRepository;
 
@@ -68,7 +69,8 @@ class SubjectTokenCustomizerAudienceTest {
         when(userRepository.findById(USER_ID)).thenReturn(Optional.of(user));
         when(userRepository.findRoleNamesByUserId(USER_ID)).thenReturn(Set.of());
 
-        customizer = new SubjectTokenCustomizer(userRepository, new ResourceIndicators(List.of(FINCO, OTHER)));
+        customizer = new SubjectTokenCustomizer(userRepository, new ResourceIndicators(List.of(FINCO, OTHER)),
+                new Issuers(List.of("http://localhost:8087/authco")));
     }
 
     private final OAuth2ClientAuthenticationToken clientPrincipal = new OAuth2ClientAuthenticationToken(client,

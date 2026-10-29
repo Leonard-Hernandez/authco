@@ -31,12 +31,20 @@ import jakarta.servlet.http.HttpServletResponse;
  * Several issuers: one authco shared by apps on different origins (e.g. restauco and
  * barberco, each behind its own gateway). Each request gets the issuer of the origin it
  * came through, so every SPA logs in on its own origin and its API validates its own
- * iss. The list is closed: a request through any other origin (in-cluster calls such
- * as http://authco:8087 for JWKS or userinfo, or a forged Host) is served as the first
- * issuer, never as the origin it claims.
+ * iss. Origins are compared normalized (see {@link Issuers}). The list is closed: a
+ * request through any other origin (in-cluster calls such as http://authco:8087 for
+ * JWKS or userinfo, or a forged Host) is served as the first issuer, never as the
+ * origin it claims. Tokens do not follow that fallback: they carry the issuer the
+ * authorization was started through, even when the code exchange or the refresh is a
+ * back-channel call (see SubjectTokenCustomizer).
  */
 @Configuration
 public class IssuerConfig {
+
+	@Bean
+	Issuers issuers(@Value("${authco.issuer}") List<String> issuers) {
+		return new Issuers(issuers);
+	}
 
 	@Bean
 	AuthorizationServerSettings authorizationServerSettings(@Value("${authco.issuer}") List<String> issuers) {
@@ -49,8 +57,7 @@ public class IssuerConfig {
 	// Before the security filter chains. The origin checked is the public one: Tomcat's
 	// RemoteIpValve has already applied X-Forwarded-* from trusted proxies.
 	@Bean
-	FilterRegistrationBean<IssuerAllowlistFilter> issuerAllowlistFilter(
-			@Value("${authco.issuer}") List<String> issuers) {
+	FilterRegistrationBean<IssuerAllowlistFilter> issuerAllowlistFilter(Issuers issuers) {
 		FilterRegistrationBean<IssuerAllowlistFilter> registration = new FilterRegistrationBean<>(
 				new IssuerAllowlistFilter(issuers));
 		registration.setOrder(Ordered.HIGHEST_PRECEDENCE + 1);
@@ -59,35 +66,30 @@ public class IssuerConfig {
 
 	static final class IssuerAllowlistFilter extends OncePerRequestFilter {
 
-		private final List<String> issuers;
+		private final Issuers issuers;
 
-		IssuerAllowlistFilter(List<String> issuers) {
-			this.issuers = issuers.stream().map(IssuerAllowlistFilter::withoutTrailingSlash).toList();
+		IssuerAllowlistFilter(Issuers issuers) {
+			this.issuers = issuers;
 		}
 
 		@Override
 		protected boolean shouldNotFilter(HttpServletRequest request) {
-			return issuers.size() == 1;
+			return !issuers.isMultiple();
 		}
 
+		// Always as the configured (normalized) issuer's origin, so SAS resolves exactly
+		// that string even when the Host header differs in case or carries :443.
 		@Override
 		protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response,
 				FilterChain chain) throws ServletException, IOException {
-			if (issuers.contains(issuerOf(request))) {
-				chain.doFilter(request, response);
-			} else {
-				chain.doFilter(new AsOrigin(request, URI.create(issuers.getFirst())), response);
-			}
+			String issuer = issuers.find(issuerOf(request)).orElse(issuers.first());
+			chain.doFilter(new AsOrigin(request, URI.create(issuer)), response);
 		}
 
 		// Same resolution as SAS: the request's origin plus the context path (/authco).
 		static String issuerOf(HttpServletRequest request) {
 			return UriComponentsBuilder.fromUriString(UrlUtils.buildFullRequestUrl(request))
 					.replacePath(request.getContextPath()).replaceQuery(null).fragment(null).build().toUriString();
-		}
-
-		private static String withoutTrailingSlash(String issuer) {
-			return issuer.endsWith("/") ? issuer.substring(0, issuer.length() - 1) : issuer;
 		}
 
 	}
