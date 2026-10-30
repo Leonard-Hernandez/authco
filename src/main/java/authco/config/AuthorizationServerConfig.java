@@ -27,6 +27,8 @@ import org.springframework.security.oauth2.server.authorization.JdbcOAuth2Author
 import org.springframework.security.oauth2.server.authorization.JdbcOAuth2AuthorizationService;
 import org.springframework.security.oauth2.server.authorization.OAuth2AuthorizationConsentService;
 import org.springframework.security.oauth2.server.authorization.OAuth2AuthorizationService;
+import org.springframework.security.oauth2.server.authorization.authentication.OAuth2AuthorizationCodeRequestAuthenticationProvider;
+import org.springframework.security.oauth2.server.authorization.authentication.OAuth2AuthorizationCodeRequestAuthenticationValidator;
 import org.springframework.security.oauth2.server.authorization.authentication.OAuth2ClientRegistrationAuthenticationProvider;
 import org.springframework.security.oauth2.server.authorization.authentication.OAuth2ClientRegistrationAuthenticationToken;
 import org.springframework.security.oauth2.server.authorization.authentication.OAuth2ClientRegistrationAuthenticationValidator;
@@ -55,6 +57,7 @@ import authco.jwk.JwkKeyService;
 import authco.security.AnonymousClientRegistrationAuthenticationProvider;
 import authco.security.DynamicClientRegistrationPolicy;
 import authco.security.FederatedOidcUserService;
+import authco.security.ResourceIndicators;
 import authco.security.TokenLifetimes;
 import lombok.AllArgsConstructor;
 
@@ -77,12 +80,20 @@ public class AuthorizationServerConfig {
 	SecurityFilterChain authorizationServerSecurityFilterChain(HttpSecurity http,
 			CorsConfigurationSource corsConfigurationSource,
 			RegisteredClientRepository registeredClientRepository, PasswordEncoder passwordEncoder,
-			DynamicClientRegistrationPolicy registrationPolicy,
+			DynamicClientRegistrationPolicy registrationPolicy, ResourceIndicators resourceIndicators,
 			@Value("${authco.cors.allowed-origins}") List<String> allowedOrigins) throws Exception {
 
 		http.oauth2AuthorizationServer((authorizationServer) -> {
 			authorizationServer
-					.authorizationEndpoint(endpoint -> endpoint.consentPage("/oauth2/consent"))
+					.authorizationEndpoint(endpoint -> endpoint.consentPage("/oauth2/consent")
+							// RFC 8707: an unknown resource fails here, not after consent.
+							.authenticationProviders(providers -> providers.forEach(provider -> {
+								if (provider instanceof OAuth2AuthorizationCodeRequestAuthenticationProvider authorization) {
+									authorization.setAuthenticationValidator(
+											new OAuth2AuthorizationCodeRequestAuthenticationValidator()
+													.andThen(resourceIndicators::validateAuthorizationRequest));
+								}
+							})))
 					// RFC 7591 registration (/oauth2/register), advertised in
 					// /.well-known/oauth-authorization-server: what MCP clients look for.
 					.clientRegistrationEndpoint(reg -> reg

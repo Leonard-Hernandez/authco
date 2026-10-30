@@ -27,7 +27,9 @@ import org.springframework.security.oauth2.jwt.JwtClaimsSet;
 import org.springframework.security.oauth2.server.authorization.OAuth2Authorization;
 import org.springframework.security.oauth2.server.authorization.OAuth2TokenType;
 import org.springframework.security.oauth2.server.authorization.authentication.OAuth2AuthorizationCodeAuthenticationToken;
+import org.springframework.security.oauth2.server.authorization.authentication.OAuth2AuthorizationGrantAuthenticationToken;
 import org.springframework.security.oauth2.server.authorization.authentication.OAuth2ClientAuthenticationToken;
+import org.springframework.security.oauth2.server.authorization.authentication.OAuth2RefreshTokenAuthenticationToken;
 import org.springframework.security.oauth2.server.authorization.client.RegisteredClient;
 import org.springframework.security.oauth2.server.authorization.token.JwtEncodingContext;
 
@@ -36,7 +38,8 @@ import authco.user.repository.UserRepository;
 
 /**
  * RFC 8707: the access token audience follows the {@code resource} the client asked
- * for, falls back to the first configured resource, and always keeps the client_id.
+ * for, within what was authorized at the authorization endpoint, falls back to the
+ * first configured resource, and always keeps the client_id.
  */
 class SubjectTokenCustomizerAudienceTest {
 
@@ -65,14 +68,21 @@ class SubjectTokenCustomizerAudienceTest {
         when(userRepository.findById(USER_ID)).thenReturn(Optional.of(user));
         when(userRepository.findRoleNamesByUserId(USER_ID)).thenReturn(Set.of());
 
-        customizer = new SubjectTokenCustomizer(userRepository, List.of(FINCO, OTHER));
+        customizer = new SubjectTokenCustomizer(userRepository, new ResourceIndicators(List.of(FINCO, OTHER)));
     }
+
+    private final OAuth2ClientAuthenticationToken clientPrincipal = new OAuth2ClientAuthenticationToken(client,
+            ClientAuthenticationMethod.NONE, null);
 
     private JwtEncodingContext accessTokenContext(Map<String, Object> tokenRequestParameters,
             OAuth2Authorization authorization) {
+        return accessTokenContext(new OAuth2AuthorizationCodeAuthenticationToken("code", clientPrincipal, CALLBACK,
+                tokenRequestParameters), authorization);
+    }
+
+    private JwtEncodingContext accessTokenContext(OAuth2AuthorizationGrantAuthenticationToken grant,
+            OAuth2Authorization authorization) {
         DefaultOAuth2User user = new DefaultOAuth2User(AuthorityUtils.NO_AUTHORITIES, Map.of("sub", USER_ID), "sub");
-        OAuth2ClientAuthenticationToken clientPrincipal = new OAuth2ClientAuthenticationToken(client,
-                ClientAuthenticationMethod.NONE, null);
 
         JwtEncodingContext.Builder builder = JwtEncodingContext
                 .with(JwsHeader.with(SignatureAlgorithm.RS256),
@@ -81,9 +91,8 @@ class SubjectTokenCustomizerAudienceTest {
                 .principal(new TestingAuthenticationToken(user, null))
                 .authorizedScopes(Set.of("openid"))
                 .tokenType(OAuth2TokenType.ACCESS_TOKEN)
-                .authorizationGrantType(AuthorizationGrantType.AUTHORIZATION_CODE)
-                .authorizationGrant(new OAuth2AuthorizationCodeAuthenticationToken("code", clientPrincipal, CALLBACK,
-                        tokenRequestParameters));
+                .authorizationGrantType(grant.getGrantType())
+                .authorizationGrant(grant);
         if (authorization != null) {
             builder.authorization(authorization);
         }
@@ -124,26 +133,68 @@ class SubjectTokenCustomizerAudienceTest {
         assertEquals(List.of("claude-client", FINCO), audience(context));
     }
 
-    @Test
-    @DisplayName("the resource sent to the authorization endpoint applies when the token request omits it")
-    void resourceFromAuthorizationRequest() {
+    /** An authorization whose /oauth2/authorize request carried these resources. */
+    private OAuth2Authorization authorizedFor(String... resources) {
         OAuth2AuthorizationRequest authorizationRequest = OAuth2AuthorizationRequest.authorizationCode()
                 .authorizationUri("http://localhost:8087/authco/oauth2/authorize")
                 .clientId(client.getClientId())
                 .redirectUri(CALLBACK)
-                .additionalParameters(Map.of("resource", List.of(FINCO + "/mcp")))
+                .additionalParameters(Map.of("resource", List.of(resources)))
                 .build();
-        OAuth2Authorization authorization = OAuth2Authorization.withRegisteredClient(client)
+        return OAuth2Authorization.withRegisteredClient(client)
                 .principalName(USER_ID)
                 .authorizationGrantType(AuthorizationGrantType.AUTHORIZATION_CODE)
                 .attribute(OAuth2AuthorizationRequest.class.getName(), authorizationRequest)
                 .build();
+    }
 
-        JwtEncodingContext context = accessTokenContext(Map.of(), authorization);
+    private OAuth2RefreshTokenAuthenticationToken refresh(Map<String, Object> parameters) {
+        return new OAuth2RefreshTokenAuthenticationToken("refresh-token", clientPrincipal, null, parameters);
+    }
+
+    @Test
+    @DisplayName("the resource sent to the authorization endpoint applies when the token request omits it")
+    void resourceFromAuthorizationRequest() {
+        JwtEncodingContext context = accessTokenContext(Map.of(), authorizedFor(FINCO + "/mcp"));
 
         customizer.customize(context);
 
         assertEquals(List.of("claude-client", FINCO), audience(context));
+    }
+
+    @Test
+    @DisplayName("the code exchange cannot swap the authorized resource for another one")
+    void codeExchangeCannotWidenResources() {
+        JwtEncodingContext context = accessTokenContext(Map.of("resource", OTHER), authorizedFor(FINCO));
+
+        OAuth2AuthenticationException ex = assertThrows(OAuth2AuthenticationException.class,
+                () -> customizer.customize(context));
+        assertEquals("invalid_target", ex.getError().getErrorCode());
+    }
+
+    @Test
+    @DisplayName("the token request may narrow the authorized resources")
+    void tokenRequestNarrowsResources() {
+        JwtEncodingContext context = accessTokenContext(Map.of("resource", OTHER), authorizedFor(FINCO, OTHER));
+
+        customizer.customize(context);
+
+        assertEquals(List.of("claude-client", OTHER), audience(context));
+    }
+
+    @Test
+    @DisplayName("a refresh stays within the resources authorized at the authorization endpoint")
+    void refreshConstrainedToAuthorizedResources() {
+        OAuth2Authorization authorization = authorizedFor(FINCO + "/mcp");
+
+        JwtEncodingContext withoutResource = accessTokenContext(refresh(Map.of()), authorization);
+        customizer.customize(withoutResource);
+        assertEquals(List.of("claude-client", FINCO), audience(withoutResource));
+
+        JwtEncodingContext otherResource = accessTokenContext(refresh(Map.of("resource", OTHER)), authorization);
+        OAuth2AuthenticationException ex = assertThrows(OAuth2AuthenticationException.class,
+                () -> customizer.customize(otherResource));
+        assertEquals("invalid_target", ex.getError().getErrorCode());
     }
 
     @Test
