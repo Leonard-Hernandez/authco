@@ -1,7 +1,15 @@
 server:
-  # Honor X-Forwarded-* from the ingress / reverse proxy (redirects, request URLs).
-  # The issuer itself comes from authco.issuer: pinned, or picked from its allowlist.
-  forward-headers-strategy: framework
+  # X-Forwarded-* (For, Proto, Host, Port) shape redirects, request URLs and, with
+  # several issuers, the issuer picked for a request. Tomcat's RemoteIpValve honors
+  # them only when the TCP peer is a trusted proxy; from anyone else they are ignored.
+  forward-headers-strategy: native
+  tomcat:
+    remoteip:
+      # Trusted proxies (comma-separated CIDRs, or a regex). Loopback only by default:
+      # set AUTHCO_TRUSTED_PROXIES to the ingress / reverse proxy addresses, e.g. the
+      # pod CIDR of the ingress controller. Never a range direct clients can come from
+      # (Tomcat's own default trusts every private range, the Docker bridge included).
+      internal-proxies: ${AUTHCO_TRUSTED_PROXIES:127.0.0.0/8, ::1/128}
   servlet:
     # Every endpoint lives under /authco, and the issuer follows it:
     # tokens carry iss=${authco.issuer}.
