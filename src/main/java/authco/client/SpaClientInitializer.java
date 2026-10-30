@@ -6,9 +6,11 @@ import java.util.List;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.oauth2.server.authorization.client.RegisteredClientRepository;
 import org.springframework.stereotype.Component;
 
+import authco.client.exception.ClientAlreadyExistsException;
 import authco.security.ClientScopes;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -19,7 +21,8 @@ import lombok.extern.slf4j.Slf4j;
  *
  * <p>
  * Disabled while {@code authco.spa-client.client-id} is empty. Only creates the client
- * when it does not exist yet; afterwards the admin API owns it. Public, PKCE required,
+ * when it does not exist yet, also when several replicas start at once; afterwards the
+ * admin API owns it. Public, PKCE required,
  * no consent (first-party) and no refresh tokens. Role scopes (finco:admin...) are not
  * registered on the client: they come from the user's roles at token time.
  */
@@ -48,9 +51,21 @@ public class SpaClientInitializer implements ApplicationRunner {
             return;
         }
 
-        clientAdminService.create(new ClientDefinition(clientId, CLIENT_NAME, ClientType.PUBLIC,
-                new LinkedHashSet<>(redirectUris), new LinkedHashSet<>(postLogoutRedirectUris), ClientScopes.ALLOWED,
-                false));
+        try {
+            clientAdminService.create(new ClientDefinition(clientId, CLIENT_NAME, ClientType.PUBLIC,
+                    new LinkedHashSet<>(redirectUris), new LinkedHashSet<>(postLogoutRedirectUris),
+                    ClientScopes.ALLOWED, false));
+        } catch (ClientAlreadyExistsException | DataIntegrityViolationException | IllegalArgumentException ex) {
+            // Replicas starting together race between the check above and the insert:
+            // the loser sees the winner's client (ClientAlreadyExistsException), Spring
+            // Authorization Server's own uniqueness check (IllegalArgumentException) or
+            // the unique constraint on client_id. Anything else is a real failure.
+            if (registeredClientRepository.findByClientId(clientId) == null) {
+                throw ex;
+            }
+            log.info("SPA client '{}' already seeded by another instance", clientId);
+            return;
+        }
         log.info("Seeded SPA client '{}' (redirect URIs: {})", clientId, redirectUris);
     }
 

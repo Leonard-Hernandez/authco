@@ -103,14 +103,10 @@ public class ResourceIndicators {
     }
 
     private static boolean matchesResource(String requested, String resource) {
-        String base = stripTrailingSlash(resource);
-        String candidate = stripTrailingSlash(requested);
+        String base = Uris.stripTrailingSlash(resource);
+        String candidate = Uris.stripTrailingSlash(requested);
         // A path boundary is required: .../v1 must not match .../v1-admin.
         return candidate.equals(base) || candidate.startsWith(base + "/");
-    }
-
-    private static String stripTrailingSlash(String uri) {
-        return uri.endsWith("/") ? uri.substring(0, uri.length() - 1) : uri;
     }
 
 }

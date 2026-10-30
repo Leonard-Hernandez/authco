@@ -77,6 +77,12 @@ authco:
     # Redirect URIs anonymous Dynamic Client Registration accepts. Exact URIs, plus
     # loopback with any port (RFC 8252): http://127.0.0.1:*, http://localhost:*.
     allowed-redirect-uris: ${AUTHCO_DCR_ALLOWED_REDIRECT_URIS:https://claude.ai/api/mcp/auth_callback,https://claude.com/api/mcp/auth_callback,http://127.0.0.1:*,http://localhost:*}
+    # Registrations accepted per client IP and window (in memory, per replica); then 429
+    # with Retry-After. Keep it generous: every Claude.ai user registers from the few
+    # addresses of Anthropic's servers.
+    rate-limit:
+      max-requests: ${AUTHCO_DCR_RATE_LIMIT_MAX_REQUESTS:30}
+      window: ${AUTHCO_DCR_RATE_LIMIT_WINDOW:10m}
   # RFC 8707: canonical URIs of the resource servers tokens can be requested for. A
   # `resource` equal to (or below) one of them puts that URI in `aud`; without
   # `resource`, the first entry is the audience.

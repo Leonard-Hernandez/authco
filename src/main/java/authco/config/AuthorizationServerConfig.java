@@ -1,13 +1,17 @@
 package authco.config;
 
+import java.time.Clock;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.UUID;
 
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -53,6 +57,7 @@ import authco.jwk.JwkKeyService;
 import authco.security.AnonymousClientRegistrationAuthenticationProvider;
 import authco.security.DynamicClientRegistrationPolicy;
 import authco.security.FederatedOidcUserService;
+import authco.security.RegistrationRateLimitFilter;
 import authco.security.ResourceIndicators;
 import authco.security.TokenLifetimes;
 import lombok.AllArgsConstructor;
@@ -156,6 +161,18 @@ public class AuthorizationServerConfig {
 								.userInfoEndpoint(userinfo -> userinfo.oidcUserService(federatedOidcUserService)))
 				.build();
 
+	}
+
+	// Ahead of the security filter chains: a rejected registration costs nothing more.
+	@Bean
+	FilterRegistrationBean<RegistrationRateLimitFilter> registrationRateLimitFilter(
+			@Value("${authco.dcr.rate-limit.max-requests}") int maxRequests,
+			@Value("${authco.dcr.rate-limit.window}") Duration window) {
+		FilterRegistrationBean<RegistrationRateLimitFilter> registration = new FilterRegistrationBean<>(
+				new RegistrationRateLimitFilter(maxRequests, window, Clock.systemUTC()));
+		registration.addUrlPatterns("/connect/register", "/oauth2/register");
+		registration.setOrder(Ordered.HIGHEST_PRECEDENCE + 2);
+		return registration;
 	}
 
 	@Bean
