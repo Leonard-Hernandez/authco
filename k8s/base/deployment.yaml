@@ -1,0 +1,58 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: authco
+  name: authco
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: authco
+  strategy: {}
+  template:
+    metadata:
+      labels:
+        app: authco
+    spec:
+      containers:
+      - image: leonard20/authco
+        imagePullPolicy: IfNotPresent
+        name: authco
+        ports:
+        - containerPort: 8087
+        envFrom:
+          - configMapRef:
+              name: authco-config
+          - secretRef:
+              name: authco-secrets
+        resources:
+          requests:
+            cpu: 250m
+            memory: 512Mi
+          limits:
+            memory: 1Gi
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 100
+          runAsGroup: 101
+          allowPrivilegeEscalation: false
+        startupProbe:
+          httpGet:
+            path: /authco/actuator/health/liveness
+            port: 8087
+          periodSeconds: 10
+          failureThreshold: 15
+        readinessProbe:
+          httpGet:
+            path: /authco/actuator/health/readiness
+            port: 8087
+          periodSeconds: 10
+          timeoutSeconds: 5
+        livenessProbe:
+          httpGet:
+            path: /authco/actuator/health/liveness
+            port: 8087
+          periodSeconds: 20
+          timeoutSeconds: 5
+          failureThreshold: 3
